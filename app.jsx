@@ -107,19 +107,34 @@ function App() {
     if (!boroTarget) return;
     const target = boroTarget;
     setBoroTarget(null);
-    pushToast(`Iniciando Playwright — "${target.name}" → ${zone}…`, 'info');
     setSubmitting(true);
+
     try {
+      // Encolar job — respuesta inmediata
       const res = await fetch('/api/submit-to-boro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ streamName: target.name, m3u8Url: target.m3u8, zone }),
       });
-      const result = await res.json();
-      if (result.success) {
-        pushToast(`✓ "${target.name}" subido a ${zone} exitosamente`);
-      } else {
-        pushToast(`Error en Boro: ${result.error}`, 'error');
+      const { jobId, position } = await res.json();
+
+      const posLabel = position > 0 ? ` · posición ${position + 1} en cola` : '';
+      pushToast(`En cola: "${target.name}" → ${zone}${posLabel}`, 'info');
+
+      // Long-poll hasta obtener resultado (loop si server responde 'pending')
+      let done = false;
+      while (!done) {
+        const poll = await fetch(`/api/job/${jobId}`);
+        const data = await poll.json();
+        if (data.status === 'done') {
+          done = true;
+          if (data.success) {
+            pushToast(`✓ "${target.name}" subido a ${zone} exitosamente`);
+          } else {
+            pushToast(`Error en Boro: ${data.error}`, 'error');
+          }
+        }
+        // status === 'pending' → server tardó >30s, reintenta inmediatamente
       }
     } catch (e) {
       pushToast(`Error de red: ${e.message}`, 'error');
