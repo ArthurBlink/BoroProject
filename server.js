@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 
 const BORO_URL = process.env.BORO_URL || 'https://boro.elecard.com';
-const BORO_EMAIL = process.env.BORO_EMAIL || 'jromero@mediastre.am';
-const BORO_PASSWORD = process.env.BORO_PASSWORD || 'Arthur.2001';
+const BORO_EMAIL = process.env.BORO_EMAIL;
+const BORO_PASSWORD = process.env.BORO_PASSWORD;
 
 app.use(express.json());
 app.use(express.static('.'));

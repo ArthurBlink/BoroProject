@@ -1,8 +1,8 @@
 import { chromium } from '@playwright/test';
 
 const BORO_URL = process.env.BORO_URL || 'https://boro.elecard.com';
-const BORO_EMAIL = process.env.BORO_EMAIL || 'jromero@mediastre.am';
-const BORO_PASSWORD = process.env.BORO_PASSWORD || 'Arthur.2001';
+const BORO_EMAIL = process.env.BORO_EMAIL;
+const BORO_PASSWORD = process.env.BORO_PASSWORD;
 
 export async function loginToBoro() {
   const browser = await chromium.launch({ headless: false });
