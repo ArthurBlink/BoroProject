@@ -64,6 +64,8 @@ function App() {
         status: s.status || 'offline',
         region: account.region || 'GLOBAL',
         key: s.key || null,
+        stream_url: s.stream_url || s.streamUrl || null,
+        publish_point: s.publish_point || s.publishPoint || null,
         thumbType: /radio|audio/i.test(s.name || '') ? 'audio' : 'video',
       }));
       setStreamsByAccount((prev) => ({ ...prev, [account.id]: mapped }));
@@ -103,25 +105,23 @@ function App() {
     pushToast(msg);
   }
 
-  async function handleBoroSubmit(zone) {
+  async function handleBoroSubmit({ zone, signalType, url }) {
     if (!boroTarget) return;
     const target = boroTarget;
     setBoroTarget(null);
     setSubmitting(true);
 
     try {
-      // Encolar job — respuesta inmediata
       const res = await fetch('/api/submit-to-boro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ streamName: target.name, m3u8Url: target.m3u8, zone }),
+        body: JSON.stringify({ streamName: target.name, streamUrl: url, zone, signalType }),
       });
       const { jobId, position } = await res.json();
 
       const posLabel = position > 0 ? ` · posición ${position + 1} en cola` : '';
-      pushToast(`En cola: "${target.name}" → ${zone}${posLabel}`, 'info');
+      pushToast(`En cola: "${target.name}" [${signalType}] → ${zone}${posLabel}`, 'info');
 
-      // Long-poll hasta obtener resultado (loop si server responde 'pending')
       let done = false;
       while (!done) {
         const poll = await fetch(`/api/job/${jobId}`);
@@ -134,7 +134,6 @@ function App() {
             pushToast(`Error en Boro: ${data.error}`, 'error');
           }
         }
-        // status === 'pending' → server tardó >30s, reintenta inmediatamente
       }
     } catch (e) {
       pushToast(`Error de red: ${e.message}`, 'error');
@@ -285,8 +284,10 @@ function App() {
                 live={live}
                 onCopy={copyTo}
                 onUpload={(live) => setBoroTarget({
+                  id: live.id,
                   name: live.name,
-                  m3u8: `https://mdstrm.com/live-stream-playlist/${live.id}.m3u8`,
+                  stream_url: live.stream_url || null,
+                  access_token: activeAccount?.accessToken || null,
                 })}
                 submitting={submitting}
               />

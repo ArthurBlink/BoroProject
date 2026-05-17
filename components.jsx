@@ -172,6 +172,7 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
   const [name, setName] = useState('');
   const [region, setRegion] = useState('LATAM');
   const [token, setToken] = useState('');
+  const [accessToken, setAccessToken] = useState('');
   const [color, setColor] = useState(ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length]);
   const inputRef = useRef(null);
 
@@ -235,21 +236,31 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
             </div>
           </div>
           <div className="field">
-            <label htmlFor="acct-token">JWT Token</label>
+            <label htmlFor="acct-token">JWT Token (API)</label>
             <textarea
               id="acct-token"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
             />
-            <span className="hint">Se guarda en el navegador (localStorage).</span>
+            <span className="hint">Para listar streams vía API.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="acct-access-token">Access Token (reproducción HLS)</label>
+            <input
+              id="acct-access-token"
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder="RjRe88VxH… (opcional)"
+            />
+            <span className="hint">Se añade como ?access_token= en URLs de video. Se guarda en localStorage.</span>
           </div>
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary"
-            onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), color })}
+            onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), accessToken: accessToken.trim(), color })}
             disabled={!canSave}
           >
             <Icon.Plus /> Conectar cuenta
@@ -272,8 +283,37 @@ const BORO_ZONES = [
   'US-Link-SRT',
 ];
 
+const SIGNAL_TYPES = [
+  { value: 'hls-video', label: 'HLS Video (.m3u8)',  placeholder: null },
+  { value: 'hls-audio', label: 'Audio HLS (.m3u8)',  placeholder: null },
+  { value: 'srt',       label: 'SRT',                placeholder: 'srt://host:port?streamid=...' },
+  { value: 'rtmp',      label: 'RTMP',               placeholder: 'rtmp://host/app/streamkey' },
+  { value: 'udp',       label: 'UDP / RTP',          placeholder: 'udp://host:port' },
+];
+
+function buildHlsUrl(target, withToken = true) {
+  const base = target.stream_url || `https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`;
+  if (withToken && target.access_token) {
+    return `${base}?dnt=true&access_token=${target.access_token}&admin_token=true`;
+  }
+  return base;
+}
+
 function BoroModal({ target, onClose, onSubmit, submitting }) {
   const [zone, setZone] = useState(BORO_ZONES[0]);
+  const [signalType, setSignalType] = useState('hls-video');
+  const [url, setUrl] = useState(() => buildHlsUrl(target));
+
+  // Recalcular URL al cambiar tipo
+  const handleTypeChange = (type) => {
+    setSignalType(type);
+    if (type === 'hls-video' || type === 'hls-audio') {
+      setUrl(buildHlsUrl(target));
+    } else {
+      const t = SIGNAL_TYPES.find((s) => s.value === type);
+      setUrl(t?.placeholder || '');
+    }
+  };
 
   useEffect(() => {
     const k = (e) => { if (e.key === 'Escape' && !submitting) onClose(); };
@@ -281,9 +321,11 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
     return () => window.removeEventListener('keydown', k);
   }, [onClose, submitting]);
 
+  const canSubmit = url.trim().length > 0;
+
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ maxWidth: 500 }}>
         <div className="modal-head">
           <div>
             <h3>Subir señal a Boro</h3>
@@ -295,22 +337,52 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
         </div>
         <div className="modal-body">
           <div className="field">
-            <label htmlFor="boro-zone">Zona / Probe</label>
-            <select id="boro-zone" value={zone} onChange={(e) => setZone(e.target.value)}>
-              {BORO_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
+            <label htmlFor="boro-signal-type">Tipo de señal</label>
+            <select
+              id="boro-signal-type"
+              value={signalType}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              disabled={submitting}
+            >
+              {SIGNAL_TYPES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
             </select>
           </div>
           <div className="field">
-            <label>URL m3u8</label>
-            <input value={target.m3u8} readOnly style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }} />
+            <label htmlFor="boro-url">URL de la señal</label>
+            <input
+              id="boro-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={submitting}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}
+              placeholder={SIGNAL_TYPES.find((s) => s.value === signalType)?.placeholder || ''}
+            />
+            {!target.access_token && (signalType === 'hls-video' || signalType === 'hls-audio') && (
+              <span className="hint" style={{ color: 'var(--warn)' }}>
+                Sin access token — configúralo en la cuenta para streams protegidos.
+              </span>
+            )}
+          </div>
+          <div className="field">
+            <label htmlFor="boro-zone">Zona / Probe</label>
+            <select
+              id="boro-zone"
+              value={zone}
+              onChange={(e) => setZone(e.target.value)}
+              disabled={submitting}
+            >
+              {BORO_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
+            </select>
           </div>
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose} disabled={submitting}>Cancelar</button>
           <button
             className="btn-primary"
-            onClick={() => onSubmit(zone)}
-            disabled={submitting}
+            onClick={() => onSubmit({ zone, signalType, url: url.trim() })}
+            disabled={submitting || !canSubmit}
           >
             {submitting ? <Icon.Loader /> : <Icon.Upload />}
             {submitting ? 'Subiendo…' : 'Subir a Boro'}

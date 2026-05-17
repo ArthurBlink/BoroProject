@@ -80,13 +80,22 @@ class BoroSession {
     if (!this.loggedIn) await this.login();
   }
 
-  async submitTask({ streamName, m3u8Url, zone }) {
+  async submitTask({ streamName, streamUrl, zone, signalType = 'hls-video' }) {
     await this.ensureLoggedIn();
     const probeId = PROBE_IDS[zone] || '8552';
     const page = await this.context.newPage();
 
+    // Determinar qué checkboxes activar según tipo de señal
+    const isAudio = signalType === 'hls-audio';
+    const opts = {
+      freeze:           !isAudio,
+      thumbnail:        !isAudio,
+      audioAnalysis:    true,
+      audioDecodability: true,
+    };
+
     try {
-      console.log(`[Boro] Submitting "${streamName}" → ${zone} (probe: ${probeId})`);
+      console.log(`[Boro] Submitting "${streamName}" [${signalType}] → ${zone} (probe: ${probeId})`);
 
       await page.goto(`${BORO_URL}/projects`);
 
@@ -96,7 +105,7 @@ class BoroSession {
         this.loggedIn = false;
         await page.close();
         await this.login();
-        return this.submitTask({ streamName, m3u8Url, zone });
+        return this.submitTask({ streamName, streamUrl, zone, signalType });
       }
 
       await page.getByRole('link', { name: 'All projects' }).click();
@@ -111,17 +120,17 @@ class BoroSession {
       await page.waitForTimeout(2000);
       await page.getByRole('button', { name: 'Add task' }).click();
       await page.locator('#add_task_ott').click();
-      await page.locator('input[name="add_task_uri"]').fill(m3u8Url);
+      await page.locator('input[name="add_task_uri"]').fill(streamUrl);
       await page.locator('input[name="add_task_name"]').fill(streamName);
       await page.getByText('select profiles').click();
       await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
       await page.getByRole('button', { name: 'OK' }).click();
 
       await page.waitForTimeout(500);
-      await page.locator('#add_task_checkbox_freeze').check();
-      await page.locator('#add_task_checkbox_thumbnail').check();
-      await page.locator('#add_task_checkbox_audioAnalysis').check();
-      await page.locator('#add_task_checkbox_audioDecodability').check();
+      if (opts.freeze)            await page.locator('#add_task_checkbox_freeze').check();
+      if (opts.thumbnail)         await page.locator('#add_task_checkbox_thumbnail').check();
+      if (opts.audioAnalysis)     await page.locator('#add_task_checkbox_audioAnalysis').check();
+      if (opts.audioDecodability) await page.locator('#add_task_checkbox_audioDecodability').check();
       await page.getByRole('button', { name: 'Start' }).click();
 
       await page.waitForTimeout(3000);
@@ -217,12 +226,12 @@ app.post('/api/live-stream', async (req, res) => {
 
 // Encola el job, responde inmediatamente con jobId
 app.post('/api/submit-to-boro', (req, res) => {
-  const { streamName, m3u8Url, zone } = req.body;
-  if (!streamName || !m3u8Url) return res.status(400).json({ error: 'Faltan parámetros' });
+  const { streamName, streamUrl, zone, signalType } = req.body;
+  if (!streamName || !streamUrl) return res.status(400).json({ error: 'Faltan parámetros' });
 
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const position = jobQueue.length;
-  jobQueue.push({ id: jobId, data: { streamName, m3u8Url, zone } });
+  jobQueue.push({ id: jobId, data: { streamName, streamUrl, zone, signalType } });
   console.log(`[Queue] Job ${jobId} enqueued at position ${position}`);
 
   res.json({ jobId, position });
