@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const API_URL = process.env.MEDIASTREAM_API_URL || 'https://platform.mediastre.am/api/live-stream';
+const API_URL = process.env.MEDIASTREAM_API_URL || 'https://dev.platform.mediastre.am/api/live-stream';
 const STREAM_ID = process.argv[2] || '69d58e4bca61dce28b729040';
 const COOKIE = process.env.MEDIASTREAM_COOKIE || '';
 
@@ -12,7 +12,7 @@ async function getStreamUrl(streamId) {
     'Accept': 'application/json, text/javascript, */*; q=0.01',
     'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
     'Connection': 'keep-alive',
-    'Referer': `https://platform.mediastre.am/live-stream/${streamId}`,
+    'Referer': `https://dev.platform.mediastre.am/live-stream/${streamId}`,
     'Sec-Fetch-Dest': 'empty',
     'Sec-Fetch-Mode': 'cors',
     'Sec-Fetch-Site': 'same-origin',

@@ -15,6 +15,9 @@ const DATA_FILE = path.join(process.cwd(), 'data.json');
 const BORO_URL = process.env.BORO_URL || 'https://boro.elecard.com';
 const BORO_EMAIL = process.env.BORO_EMAIL || process.env.BORO_USERNAME;
 const BORO_PASSWORD = process.env.BORO_PASSWORD;
+const MS_API_BASE = process.env.MEDIASTREAM_API_URL
+  ? new URL(process.env.MEDIASTREAM_API_URL).origin
+  : 'https://dev.platform.mediastre.am';
 
 app.use(express.json());
 app.use(express.static('.'));
@@ -208,7 +211,7 @@ app.post('/api/live-stream', async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: 'Token requerido' });
   try {
-    const response = await fetch('https://platform.mediastre.am/api/live-stream?all=true&limit=50&skip=0', {
+    const response = await fetch(`${MS_API_BASE}/api/live-stream?all=true&limit=50&skip=0`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -266,7 +269,7 @@ app.post('/api/issue-access-token', async (req, res) => {
   if (!apiKey || !streamId) return res.status(400).json({ error: 'apiKey y streamId requeridos' });
   try {
     const response = await fetch(
-      `https://platform.mediastre.am/api/access/issue?type=live&max_use=10&token=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(streamId)}`,
+      `${MS_API_BASE}/api/access/issue?type=live&max_use=10&token=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(streamId)}`,
       { method: 'POST', redirect: 'follow' }
     );
     const data = await response.json();

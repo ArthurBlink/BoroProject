@@ -28,6 +28,7 @@ function App() {
   const [streamsByAccount, setStreamsByAccount] = useState({});
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
   const [boroTarget, setBoroTarget] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState('');
@@ -61,7 +62,7 @@ function App() {
       const mapped = (data.data || []).map((s) => ({
         id: s._id || s.id,
         name: s.name || 'Sin nombre',
-        status: s.status || 'offline',
+        status: (s.monitor?.status || s.status || 'offline').toLowerCase(),
         region: account.region || 'GLOBAL',
         key: s.key || null,
         stream_url: s.stream_url || s.streamUrl || null,
@@ -160,6 +161,35 @@ function App() {
     pushToast(`Cuenta "${account.name}" conectada`);
   }
 
+  function handleEditSave(updated) {
+    const initials = updated.name
+      .replace(/[^A-Za-z0-9]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '??';
+    const updatedAccounts = accounts.map((a) =>
+      a.id === editingAccount.id ? { ...a, ...updated, initials } : a
+    );
+    setAccounts(updatedAccounts);
+    saveAccounts(updatedAccounts);
+    setEditingAccount(null);
+    pushToast(`Cuenta "${updated.name}" actualizada`);
+  }
+
+  function handleDeleteAccount(id) {
+    const updatedAccounts = accounts.filter((a) => a.id !== id);
+    setAccounts(updatedAccounts);
+    saveAccounts(updatedAccounts);
+    if (activeAccountId === id) {
+      setActiveAccountId(updatedAccounts[0]?.id || null);
+    }
+    setEditingAccount(null);
+    pushToast('Cuenta eliminada', 'info');
+  }
+
   function handleSelectAccount(id) {
     setActiveAccountId(id);
     setStatusFilter('all');
@@ -182,6 +212,7 @@ function App() {
           activeId={activeAccountId}
           onSelect={handleSelectAccount}
           onAdd={() => setShowAdd(true)}
+          onEdit={(id) => setEditingAccount(accounts.find((a) => a.id === id) || null)}
         />
       )}
 
@@ -301,6 +332,15 @@ function App() {
           onClose={() => setShowAdd(false)}
           onSave={handleAddSave}
           existingCount={accounts.length}
+        />
+      )}
+
+      {editingAccount && (
+        <AddAccountModal
+          onClose={() => setEditingAccount(null)}
+          onSave={handleEditSave}
+          initialData={editingAccount}
+          onDelete={handleDeleteAccount}
         />
       )}
 

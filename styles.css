@@ -284,6 +284,38 @@ input, select, textarea {
 
 .add-account-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+.account-row .row-edit {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--text-mute);
+  flex-shrink: 0;
+  transition: all var(--t-fast) var(--ease);
+  background: transparent;
+}
+.account-row:hover .row-edit { opacity: 1; }
+.account-row .row-edit:hover { background: var(--surface-3); color: var(--text); }
+
+/* danger button in modal */
+.btn-danger {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent);
+  background: transparent;
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--t-fast) var(--ease);
+}
+.btn-danger:hover { background: color-mix(in oklab, var(--danger) 12%, transparent); border-color: var(--danger); }
+
 .sidebar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
 .sidebar-foot {

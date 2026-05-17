@@ -19,6 +19,8 @@ const Icon = {
   Settings: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .4 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.4 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.4l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .4-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.4-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.4H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.4l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.4 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>,
   AlertCircle: (p) => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
   Loader: ({ className = '', ...p }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`spin ${className}`} {...p}><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>,
+  Pencil: (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Trash: (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
 };
 
 /* ----------------------------- Toast tray ----------------------------- */
@@ -103,7 +105,7 @@ function LiveCard({ live, onCopy, onUpload, submitting }) {
 
 /* ----------------------------- Sidebar ----------------------------- */
 
-function Sidebar({ accounts, activeId, onSelect, onAdd }) {
+function Sidebar({ accounts, activeId, onSelect, onAdd, onEdit }) {
   return (
     <aside className="sidebar" aria-label="Cuentas">
       <div className="sidebar-head">
@@ -140,6 +142,14 @@ function Sidebar({ accounts, activeId, onSelect, onAdd }) {
                 <div className="account-name">{a.name}</div>
                 <div className="account-meta">{a.meta}</div>
               </div>
+              <button
+                className="row-edit"
+                onClick={(e) => { e.stopPropagation(); onEdit(a.id); }}
+                aria-label="Editar cuenta"
+                title="Editar"
+              >
+                <Icon.Pencil />
+              </button>
               <div className="account-check"><Icon.Check /></div>
             </div>
           ))}
@@ -168,12 +178,14 @@ function Sidebar({ accounts, activeId, onSelect, onAdd }) {
 
 const ACCOUNT_COLORS = ['#25E0FF', '#5358FF', '#FF8FA3', '#FFB547', '#2EE6A6', '#FF6A82'];
 
-function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
-  const [name, setName] = useState('');
-  const [region, setRegion] = useState('LATAM');
-  const [token, setToken] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [color, setColor] = useState(ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length]);
+function AddAccountModal({ onClose, onSave, existingCount = 0, initialData = null, onDelete }) {
+  const isEdit = !!initialData;
+  const [name, setName] = useState(initialData?.name || '');
+  const [region, setRegion] = useState(initialData?.region || 'LATAM');
+  const [token, setToken] = useState(initialData?.token || '');
+  const [apiKey, setApiKey] = useState(initialData?.apiKey || '');
+  const [color, setColor] = useState(initialData?.color || ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -190,8 +202,8 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-head">
           <div>
-            <h3>Agregar cuenta de Mediastream</h3>
-            <p>Conecta una cuenta para listar sus señales en vivo.</p>
+            <h3>{isEdit ? 'Editar cuenta' : 'Agregar cuenta de Mediastream'}</h3>
+            <p>{isEdit ? name : 'Conecta una cuenta para listar sus señales en vivo.'}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><Icon.Close /></button>
         </div>
@@ -258,13 +270,28 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
           </div>
         </div>
         <div className="modal-foot">
+          {isEdit && onDelete && (
+            confirmDelete ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginRight: 'auto' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>¿Eliminar cuenta?</span>
+                <button className="btn-danger" onClick={() => onDelete(initialData.id)}>
+                  <Icon.Trash /> Confirmar
+                </button>
+                <button className="btn-ghost" onClick={() => setConfirmDelete(false)}>No</button>
+              </div>
+            ) : (
+              <button className="btn-danger" style={{ marginRight: 'auto' }} onClick={() => setConfirmDelete(true)}>
+                <Icon.Trash /> Eliminar
+              </button>
+            )
+          )}
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary"
             onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), apiKey: apiKey.trim(), color })}
             disabled={!canSave}
           >
-            <Icon.Plus /> Conectar cuenta
+            {isEdit ? <><Icon.Check /> Guardar cambios</> : <><Icon.Plus /> Conectar cuenta</>}
           </button>
         </div>
       </div>
@@ -437,4 +464,5 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
 
 Object.assign(window, {
   Icon, ToastTray, LiveCard, Sidebar, AddAccountModal, BoroModal,
+  ACCOUNT_COLORS,
 });
