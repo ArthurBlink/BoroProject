@@ -3,9 +3,9 @@ import { test, expect } from '@playwright/test';
 test('Crear señal en vivo para monitoreo', async ({ page }) => {
   await page.goto('https://boro.elecard.com/users/sign_in');
   await page.getByRole('textbox', { name: 'E-mail' }).click();
-  await page.getByRole('textbox', { name: 'E-mail' }).fill('jromero@mediastre.am');
+  await page.getByRole('textbox', { name: 'E-mail' }).fill(process.env.BORO_EMAIL);
   await page.getByRole('textbox', { name: 'Password' }).click();
-  await page.getByRole('textbox', { name: 'Password' }).fill('Arthur.2001');
+  await page.getByRole('textbox', { name: 'Password' }).fill(process.env.BORO_PASSWORD);
   await page.getByRole('button', { name: 'Log In' }).click();
   await page.getByRole('link', { name: 'All projects' }).click();
   await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
