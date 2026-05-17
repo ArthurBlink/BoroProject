@@ -260,6 +260,26 @@ app.get('/api/job/:id', (req, res) => {
   jobEmitter.once(id, handler);
 });
 
+// Proxy para emitir access token de consumo HLS desde Mediastream
+app.post('/api/issue-access-token', async (req, res) => {
+  const { apiKey, streamId } = req.body;
+  if (!apiKey || !streamId) return res.status(400).json({ error: 'apiKey y streamId requeridos' });
+  try {
+    const response = await fetch(
+      `https://platform.mediastre.am/api/access/issue?type=live&max_use=10&token=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(streamId)}`,
+      { method: 'POST', redirect: 'follow' }
+    );
+    const data = await response.json();
+    if (data.status === 'OK') {
+      res.json({ access_token: data.access_token });
+    } else {
+      res.status(400).json({ error: data.message || 'Error emitiendo token' });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Graceful shutdown — cierra el browser de Playwright
 process.on('SIGTERM', async () => { await boroSession.close(); process.exit(0); });
 process.on('SIGINT',  async () => { await boroSession.close(); process.exit(0); });

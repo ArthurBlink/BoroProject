@@ -172,7 +172,7 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
   const [name, setName] = useState('');
   const [region, setRegion] = useState('LATAM');
   const [token, setToken] = useState('');
-  const [accessToken, setAccessToken] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [color, setColor] = useState(ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length]);
   const inputRef = useRef(null);
 
@@ -246,21 +246,22 @@ function AddAccountModal({ onClose, onSave, existingCount = 0 }) {
             <span className="hint">Para listar streams vía API.</span>
           </div>
           <div className="field">
-            <label htmlFor="acct-access-token">Access Token (reproducción HLS)</label>
+            <label htmlFor="acct-api-key">API Key (para tokens HLS)</label>
             <input
-              id="acct-access-token"
-              value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="RjRe88VxH… (opcional)"
+              id="acct-api-key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="aa7c4501cb56d706ee57afbcd56449b6 (opcional)"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
             />
-            <span className="hint">Se añade como ?access_token= en URLs de video. Se guarda en localStorage.</span>
+            <span className="hint">Token para POST /api/access/issue — genera URLs de consumo HLS con acceso temporal.</span>
           </div>
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary"
-            onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), accessToken: accessToken.trim(), color })}
+            onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), apiKey: apiKey.trim(), color })}
             disabled={!canSave}
           >
             <Icon.Plus /> Conectar cuenta
@@ -291,37 +292,63 @@ const SIGNAL_TYPES = [
   { value: 'udp',       label: 'UDP / RTP',          placeholder: 'udp://host:port' },
 ];
 
-function buildHlsUrl(target, withToken = true) {
-  const base = target.stream_url || `https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`;
-  if (withToken && target.access_token) {
-    return `${base}?dnt=true&access_token=${target.access_token}&admin_token=true`;
-  }
-  return base;
-}
-
 function BoroModal({ target, onClose, onSubmit, submitting }) {
-  const [zone, setZone] = useState(BORO_ZONES[0]);
-  const [signalType, setSignalType] = useState('hls-video');
-  const [url, setUrl] = useState(() => buildHlsUrl(target));
+  const { useState: _useState, useEffect: _useEffect } = React;
+  const [zone, setZone] = _useState(BORO_ZONES[0]);
+  const [signalType, setSignalType] = _useState('hls-video');
+  const [url, setUrl] = _useState('');
+  const [fetchingToken, setFetchingToken] = _useState(false);
+  const [tokenError, setTokenError] = _useState(null);
 
-  // Recalcular URL al cambiar tipo
-  const handleTypeChange = (type) => {
-    setSignalType(type);
-    if (type === 'hls-video' || type === 'hls-audio') {
-      setUrl(buildHlsUrl(target));
-    } else {
-      const t = SIGNAL_TYPES.find((s) => s.value === type);
-      setUrl(t?.placeholder || '');
+  const isHls = signalType === 'hls-video' || signalType === 'hls-audio';
+
+  async function issueToken() {
+    if (!target.apiKey || !target.id) {
+      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      if (!target.apiKey) setTokenError('Sin API Key — URL sin token de acceso.');
+      return;
     }
-  };
+    setFetchingToken(true);
+    setTokenError(null);
+    try {
+      const res = await fetch('/api/issue-access-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: target.apiKey, streamId: target.id }),
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8?access_token=${data.access_token}`);
+        setTokenError(null);
+      } else {
+        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+        setTokenError(`Error: ${data.error || 'no se pudo emitir token'}`);
+      }
+    } catch (e) {
+      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      setTokenError(`Error de red: ${e.message}`);
+    } finally {
+      setFetchingToken(false);
+    }
+  }
 
-  useEffect(() => {
+  _useEffect(() => {
+    if (isHls) {
+      issueToken();
+    } else {
+      const t = SIGNAL_TYPES.find((s) => s.value === signalType);
+      setUrl(t?.placeholder || '');
+      setTokenError(null);
+    }
+  }, [signalType]);
+
+  _useEffect(() => {
     const k = (e) => { if (e.key === 'Escape' && !submitting) onClose(); };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [onClose, submitting]);
 
-  const canSubmit = url.trim().length > 0;
+  const canSubmit = url.trim().length > 0 && !fetchingToken;
 
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
@@ -341,37 +368,52 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
             <select
               id="boro-signal-type"
               value={signalType}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              disabled={submitting}
+              onChange={(e) => setSignalType(e.target.value)}
+              disabled={submitting || fetchingToken}
             >
               {SIGNAL_TYPES.map((s) => (
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
           </div>
+
           <div className="field">
-            <label htmlFor="boro-url">URL de la señal</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label htmlFor="boro-url" style={{ margin: 0 }}>
+                URL de la señal
+                {fetchingToken && <Icon.Loader style={{ marginLeft: 6, verticalAlign: 'middle' }} />}
+              </label>
+              {isHls && (
+                <button
+                  type="button"
+                  onClick={issueToken}
+                  disabled={fetchingToken || submitting}
+                  style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  {fetchingToken ? 'Generando…' : '↺ Regenerar token'}
+                </button>
+              )}
+            </div>
             <input
               id="boro-url"
-              value={url}
+              value={fetchingToken ? 'Generando URL con token…' : url}
               onChange={(e) => setUrl(e.target.value)}
-              disabled={submitting}
-              style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}
+              disabled={submitting || fetchingToken}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}
               placeholder={SIGNAL_TYPES.find((s) => s.value === signalType)?.placeholder || ''}
             />
-            {!target.access_token && (signalType === 'hls-video' || signalType === 'hls-audio') && (
-              <span className="hint" style={{ color: 'var(--warn)' }}>
-                Sin access token — configúralo en la cuenta para streams protegidos.
-              </span>
+            {tokenError && (
+              <span className="hint" style={{ color: 'var(--warn)' }}>{tokenError}</span>
             )}
           </div>
+
           <div className="field">
             <label htmlFor="boro-zone">Zona / Probe</label>
             <select
               id="boro-zone"
               value={zone}
               onChange={(e) => setZone(e.target.value)}
-              disabled={submitting}
+              disabled={submitting || fetchingToken}
             >
               {BORO_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
             </select>

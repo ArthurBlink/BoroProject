@@ -287,7 +287,7 @@ function App() {
                   id: live.id,
                   name: live.name,
                   stream_url: live.stream_url || null,
-                  access_token: activeAccount?.accessToken || null,
+                  apiKey: activeAccount?.apiKey || null,
                 })}
                 submitting={submitting}
               />
