@@ -1,0 +1,30 @@
+import { test, expect } from '@playwright/test';
+
+test('Crear señal en vivo para monitoreo', async ({ page }) => {
+  await page.goto('https://boro.elecard.com/users/sign_in');
+  await page.getByRole('textbox', { name: 'E-mail' }).click();
+  await page.getByRole('textbox', { name: 'E-mail' }).fill('jromero@mediastre.am');
+  await page.getByRole('textbox', { name: 'Password' }).click();
+  await page.getByRole('textbox', { name: 'Password' }).fill('Arthur.2001');
+  await page.getByRole('button', { name: 'Log In' }).click();
+  await page.getByRole('link', { name: 'All projects' }).click();
+  await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+  await page.locator('#toSidebar').click();
+  await page.getByRole('link', { name: 'CO - Boro' }).click();
+  await page.locator('#sidebar_probe_8552').getByRole('link', { name: 'CO - Boro' }).click();
+  await page.getByRole('button', { name: 'Add task' }).click();
+  await page.locator('#add_task_ott').click();
+  await page.locator('input[name="add_task_uri"]').click();
+  await page.locator('input[name="add_task_uri"]').fill('http://prueba.m3u8');
+  await page.locator('input[name="add_task_name"]').click();
+  await page.locator('input[name="add_task_name"]').fill('test');
+  await page.getByText('select profiles').click();
+  await page.locator('label').filter({ hasText: 'soporte' }).nth(2).click();
+  await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.locator('#add_task_checkbox_freeze').check();
+  await page.locator('#add_task_checkbox_thumbnail').check();
+  await page.locator('#add_task_checkbox_audioAnalysis').check();
+  await page.locator('#add_task_checkbox_audioDecodability').check();
+  await page.getByRole('button', { name: 'Start' }).click();
+});

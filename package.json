@@ -1,0 +1,22 @@
+{
+  "name": "boro-automation",
+  "version": "1.0.0",
+  "description": "Automatización para Boro Elecard - Crear tareas y monitorear señales",
+  "type": "module",
+  "scripts": {
+    "get-stream": "node src/api/getStream.js <stream-id>",
+    "create-task": "node src/boro/createTask.js <task-name> <stream-url>",
+    "list-tasks": "node src/boro/listTasks.js [task-name]",
+    "auto-create": "node src/automation/autoCreateTask.js <stream-id> [task-name>",
+    "explore": "node src/boro/exploreBoro.js",
+    "playwright": "playwright"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
