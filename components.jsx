@@ -178,6 +178,8 @@ function Sidebar({ accounts, activeId, onSelect, onAdd, onEdit }) {
 
 const ACCOUNT_COLORS = ['#25E0FF', '#5358FF', '#FF8FA3', '#FFB547', '#2EE6A6', '#FF6A82'];
 
+const ACCOUNT_REGIONS = ['LATAM', 'US', 'EU', 'BR', 'CO', 'PE', 'CL', 'MX', 'AR', 'GLOBAL'];
+
 function AddAccountModal({ onClose, onSave, existingCount = 0, initialData = null, onDelete }) {
   const isEdit = !!initialData;
   const [name, setName] = useState(initialData?.name || '');
@@ -220,12 +222,15 @@ function AddAccountModal({ onClose, onSave, existingCount = 0, initialData = nul
           </div>
           <div className="field">
             <label htmlFor="acct-region">Región</label>
-            <input
+            <select
               id="acct-region"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              placeholder="Ej. LATAM, US, EU"
-            />
+            >
+              {[...new Set([...ACCOUNT_REGIONS, region])].map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
             <span className="hint">Se usa como etiqueta en las señales de esta cuenta.</span>
           </div>
           <div className="field">
@@ -345,7 +350,7 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
       });
       const data = await res.json();
       if (data.access_token) {
-        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8?access_token=${data.access_token}`);
+        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8?access_token=${data.access_token}&admin_token=true`);
         setTokenError(null);
       } else {
         setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);

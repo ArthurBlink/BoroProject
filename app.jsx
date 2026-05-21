@@ -77,10 +77,8 @@ function App() {
     }
   }
 
-  const regions = useMemo(() => {
-    const s = new Set(streams.map((l) => l.region));
-    return ['all', ...Array.from(s)];
-  }, [streams]);
+  const ALL_REGIONS = ['LATAM', 'US', 'EU', 'BR', 'CO', 'PE', 'CL', 'MX', 'AR', 'GLOBAL'];
+  const regions = ['all', ...ALL_REGIONS];
 
   const counts = useMemo(() => ({
     all: streams.length,

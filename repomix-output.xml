@@ -1,0 +1,3271 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.env.example
+.gitignore
+app.jsx
+components.jsx
+index.html
+package.json
+server.js
+src/api/getStream.js
+src/automation/autoCreateTask.js
+src/boro/boroAutomation.js
+src/boro/createTask.js
+src/boro/exploreBoro.js
+src/boro/listTasks.js
+styles.css
+tests/create-live-stream.spec.js
+tweaks-panel.jsx
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".gitignore">
+node_modules/
+.env
+data.json
+</file>
+
+<file path="package.json">
+{
+  "name": "boro-automation",
+  "version": "1.0.0",
+  "description": "Automatización para Boro Elecard - Crear tareas y monitorear señales",
+  "type": "module",
+  "scripts": {
+    "get-stream": "node src/api/getStream.js <stream-id>",
+    "create-task": "node src/boro/createTask.js <task-name> <stream-url>",
+    "list-tasks": "node src/boro/listTasks.js [task-name]",
+    "auto-create": "node src/automation/autoCreateTask.js <stream-id> [task-name>",
+    "explore": "node src/boro/exploreBoro.js",
+    "playwright": "playwright"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
+</file>
+
+<file path="src/automation/autoCreateTask.js">
+import dotenv from 'dotenv';
+import { getStreamUrl } from '../api/getStream.js';
+import { loginToBoro, createTask } from '../boro/boroAutomation.js';
+
+dotenv.config();
+
+const STREAM_ID = process.argv[2];
+const TASK_NAME = process.argv[3] || `Stream ${STREAM_ID}`;
+
+async function main() {
+  if (!STREAM_ID) {
+    console.error('Usage: node autoCreateTask.js <stream-id> [task-name]');
+    process.exit(1);
+  }
+
+  console.log('=== Auto Create Boro Task ===\n');
+
+  console.log('Step 1: Getting stream URL from Mediastre.am...');
+  const streamUrl = await getStreamUrl(STREAM_ID);
+
+  if (!streamUrl) {
+    console.error('Failed to get stream URL');
+    process.exit(1);
+  }
+
+  console.log('\nStep 2: Creating task in Boro...');
+  const { browser, page } = await loginToBoro();
+
+  await page.waitForTimeout(2000);
+
+  const success = await createTask(page, TASK_NAME, streamUrl);
+
+  if (success) {
+    console.log('\n✓ Task created successfully!');
+    console.log(`  Name: ${TASK_NAME}`);
+    console.log(`  URL: ${streamUrl}`);
+  } else {
+    console.log('\n✗ Failed to create task');
+  }
+
+  await browser.close();
+}
+
+main().catch(console.error);
+</file>
+
+<file path="src/boro/createTask.js">
+import dotenv from 'dotenv';
+import { loginToBoro, createTask } from './boroAutomation.js';
+
+dotenv.config();
+
+const TASK_NAME = process.argv[2] || 'Test Task';
+const STREAM_URL = process.argv[3] || 'https://example.com/stream.m3u8';
+
+async function main() {
+  console.log('Starting Boro task creation...');
+  console.log(`Task Name: ${TASK_NAME}`);
+  console.log(`Stream URL: ${STREAM_URL}`);
+
+  const { browser, page } = await loginToBoro();
+
+  await page.waitForTimeout(2000);
+
+  const success = await createTask(page, TASK_NAME, STREAM_URL);
+
+  if (success) {
+    console.log('Task created successfully!');
+  } else {
+    console.log('Failed to create task');
+  }
+
+  await browser.close();
+}
+
+main().catch(console.error);
+</file>
+
+<file path="src/boro/exploreBoro.js">
+import { chromium } from 'playwright';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const BORO_URL = process.env.BORO_URL;
+const BORO_USERNAME = process.env.BORO_USERNAME;
+const BORO_PASSWORD = process.env.BORO_PASSWORD;
+
+async function exploreBoro() {
+  console.log('=== Explorando Boro para identificar selectors ===\n');
+
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    console.log('1. Navegando directamente a Boro login...');
+    await page.goto('https://boro.elecard.com/users/sign_in');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2000);
+
+    console.log(`   URL actual: ${page.url()}`);
+
+    console.log('\n2. Analizando formulario de login...');
+    const loginForm = await page.evaluate(() => {
+      const forms = document.querySelectorAll('form');
+      const inputs = document.querySelectorAll('input');
+      const labels = document.querySelectorAll('label');
+      const buttons = document.querySelectorAll('button, input[type="submit"]');
+      return {
+        forms_count: forms.length,
+        inputs: Array.from(inputs).map(i => ({
+          type: i.type,
+          name: i.name,
+          id: i.id,
+          placeholder: i.placeholder,
+          class: i.className
+        })),
+        labels: Array.from(labels).map(l => ({
+          text: l.textContent?.trim(),
+          for: l.htmlFor
+        })),
+        buttons: Array.from(buttons).map(b => ({
+          text: b.textContent?.trim(),
+          type: b.type,
+          class: b.className,
+          value: b.value
+        }))
+      };
+    });
+    console.log('   Inputs:', JSON.stringify(loginForm.inputs, null, 2));
+    console.log('   Labels:', JSON.stringify(loginForm.labels, null, 2));
+    console.log('   Botones:', JSON.stringify(loginForm.buttons, null, 2));
+
+    console.log('\n3. Completando credenciales...');
+    const emailInput = page.locator('#user_email, input[name="user[email]"]').first();
+    await emailInput.fill(BORO_USERNAME);
+    console.log('   Email completado');
+
+    const passwordInput = page.locator('#user_password, input[name="user[password]"]').first();
+    await passwordInput.fill(BORO_PASSWORD);
+    console.log('   Password completado');
+
+    const rememberMeCheckbox = page.locator('#user_remember_me').first();
+    if (await rememberMeCheckbox.isVisible()) {
+      await rememberMeCheckbox.check();
+      console.log('   Recordarme marcado');
+    }
+
+    const submitBtn = page.locator('input[type="submit"], button[type="submit"]').first();
+    const submitInfo = await submitBtn.evaluate(el => ({
+      type: el.type,
+      value: el.value,
+      class: el.className
+    }));
+    console.log(`   Botón submit: ${JSON.stringify(submitInfo)}`);
+
+    await submitBtn.click();
+    console.log('   Login enviado...');
+    await page.waitForTimeout(3000);
+
+    console.log(`   URL después del login: ${page.url()}`);
+
+    console.log('\n4. Cerrando diálogos si existen...');
+    const closeButtons = await page.locator('button:has-text("OK"), button:has-text("Close"), .ui-dialog-titlebar-close').all();
+    for (const btn of closeButtons.slice(0, 3)) {
+      try {
+        if (await btn.isVisible({ timeout: 1000 })) {
+          await btn.click();
+          await page.waitForTimeout(500);
+          console.log('   Cerrado diálogo');
+        }
+      } catch (e) {}
+    }
+
+    console.log('\n5. Explorando página principal después del login...');
+    await page.waitForTimeout(2000);
+
+    const mainPage = await page.evaluate(() => {
+      const navItems = document.querySelectorAll('nav a, .nav a, [class*="nav"] a, menu a, [role="menuitem"]');
+      const buttons = document.querySelectorAll('button, [role="button"], .btn');
+      const links = document.querySelectorAll('a');
+      const pageTitle = document.querySelector('h1, h2, [class*="title"], [class*="header"]');
+      return {
+        page_title: pageTitle?.textContent?.trim(),
+        nav_items: Array.from(navItems).map(a => ({
+          text: a.textContent?.trim(),
+          href: a.href,
+          class: a.className
+        })).slice(0, 20),
+        buttons: Array.from(buttons).slice(0, 15).map(b => ({
+          text: b.textContent?.trim(),
+          class: b.className
+        })),
+        links_sample: Array.from(links).slice(0, 15).map(a => ({
+          text: a.textContent?.trim(),
+          href: a.href?.substring(0, 80)
+        }))
+      };
+    });
+    console.log('   Título de página:', mainPage.page_title);
+    console.log('   Navegación:', JSON.stringify(mainPage.nav_items, null, 2));
+    console.log('   Botones:', JSON.stringify(mainPage.buttons, null, 2));
+
+    console.log('\n6. Buscando "All Projects"...');
+    const allProjectsLink = await page.locator('text=All Projects').first();
+    if (await allProjectsLink.isVisible()) {
+      const allProjectsSelector = await allProjectsLink.evaluate(el => {
+        if (el.id) return `#${el.id}`;
+        if (el.className) return `.${el.className.split(' ').join('.')}`;
+        return el.outerHTML.substring(0, 150);
+      });
+      console.log(`   All Projects encontrado: ${allProjectsSelector}`);
+      await allProjectsLink.click();
+      await page.waitForTimeout(2000);
+    } else {
+      console.log('   No se encontró "All Projects" visible');
+    }
+
+    console.log(`\n   URL actual: ${page.url()}`);
+
+    console.log('\n7. Buscando proyecto "Mediastream"...');
+    const projectLink = await page.locator('text=Mediastream').first();
+    if (await projectLink.isVisible()) {
+      const projectSelector = await projectLink.evaluate(el => ({
+        tag: el.tagName,
+        text: el.textContent?.trim(),
+        class: el.className,
+        id: el.id,
+        href: el.href
+      }));
+      console.log(`   Proyecto encontrado: ${JSON.stringify(projectSelector)}`);
+    } else {
+      console.log('   No se encontró "Mediastream" visible');
+    }
+
+    console.log('\n8. Haciendo clic en proyecto Mediastream...');
+    await page.locator('text=Mediastream').click();
+    await page.waitForTimeout(3000);
+    console.log(`   URL después de clic en Mediastream: ${page.url()}`);
+
+    console.log('\n9. Explorando estructura de zonas (CL, CO, EU, PE, US, SRT)...');
+    const zones = await page.evaluate(() => {
+      const zoneTabs = document.querySelectorAll('[class*="tab"], [role="tab"], .tabs, [class*="zone"]');
+      const headings = document.querySelectorAll('h1, h2, h3, h4, [class*="heading"]');
+      const sidebarItems = document.querySelectorAll('[class*="sidebar"] a, [class*="menu"] a, [class*="nav"] a');
+      return {
+        headings: Array.from(headings).map(h => h.textContent?.trim()).filter(Boolean).slice(0, 10),
+        tabs: Array.from(zoneTabs).map(t => ({
+          text: t.textContent?.trim().substring(0, 50),
+          class: t.className
+        })),
+        sidebar: Array.from(sidebarItems).map(s => ({
+          text: s.textContent?.trim(),
+          href: s.href
+        }))
+      };
+    });
+    console.log('   Encabezados:', JSON.stringify(zones.headings, null, 2));
+    console.log('   Tabs/Zonas:', JSON.stringify(zones.zones, null, 2));
+    console.log('   Sidebar:', JSON.stringify(zones.sidebar, null, 2));
+
+    console.log('\n10. Explorando la página del proyecto...');
+    const projectPage = await page.evaluate(() => {
+      const tables = document.querySelectorAll('table');
+      const links = document.querySelectorAll('a');
+      const divs = document.querySelectorAll('div[class]');
+      return {
+        tables_count: tables.length,
+        links_count: links.length,
+        divs_sample: Array.from(divs).slice(0, 20).map(d => ({
+          class: d.className,
+          text: d.textContent?.trim().substring(0, 80)
+        }))
+      };
+    });
+    console.log('   Tables:', projectPage.tables_count);
+    console.log('   Links:', projectPage.links_count);
+    console.log('   Divs:', JSON.stringify(projectPage.dirs_sample, null, 2));
+
+    console.log('\n=== Exploración completada ===');
+    console.log('\n=== RESUMEN DE SELECTORS ===');
+    console.log('Login: #user_email, #user_password, input[type="submit"]');
+    console.log('All Projects: a[href="/projects?projects=all"]');
+    console.log('Proyecto Mediastream: a.project_link2, text=Mediastream');
+
+  } catch (error) {
+    console.error('Error durante exploración:', error.message);
+  } finally {
+    await browser.close();
+  }
+}
+
+exploreBoro().catch(console.error);
+</file>
+
+<file path="src/boro/listTasks.js">
+import dotenv from 'dotenv';
+import { loginToBoro, listTasks, getTaskStatus } from './boroAutomation.js';
+
+dotenv.config();
+
+const TASK_NAME = process.argv[2];
+
+async function main() {
+  console.log('Connecting to Boro...');
+
+  const { browser, page } = await loginToBoro();
+
+  await page.waitForTimeout(2000);
+
+  if (TASK_NAME) {
+    const status = await getTaskStatus(page, TASK_NAME);
+    console.log(`\nTask: ${TASK_NAME}`);
+    console.log(`Status: ${status}`);
+  } else {
+    const tasks = await listTasks(page);
+    console.log('\n--- Tasks List ---');
+    tasks.forEach((task, index) => {
+      console.log(`${index + 1}. ${task.name}`);
+    });
+  }
+
+  await browser.close();
+}
+
+main().catch(console.error);
+</file>
+
+<file path="tweaks-panel.jsx">
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // deck-stage enables its rail in connectedCallback, but this panel can
+  // mount before that element has upgraded. The initial read catches the
+  // common case; the listener covers mounting first. (Older deck-stage.js
+  // copies still wait for the host's __omelette_rail_enabled postMessage —
+  // same listener handles those.)
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Boro · Live Streams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
+</file>
+
+<file path="src/api/getStream.js">
+import fetch from 'node-fetch';
+
+const API_URL = process.env.MEDIASTREAM_API_URL || 'https://dev.platform.mediastre.am/api/live-stream';
+const STREAM_ID = process.argv[2] || '69d58e4bca61dce28b729040';
+const COOKIE = process.env.MEDIASTREAM_COOKIE || '';
+
+async function getStreamUrl(streamId) {
+  const timestamp = Date.now();
+  const url = `${API_URL}/${streamId}?_=${timestamp}`;
+
+  const headers = {
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+    'Connection': 'keep-alive',
+    'Referer': `https://dev.platform.mediastre.am/live-stream/${streamId}`,
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+    'X-Requested-With': 'XMLHttpRequest'
+  };
+
+  if (COOKIE) {
+    headers['Cookie'] = COOKIE;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    const data = await response.json();
+
+    const streamInfo = {
+      stream_url: data.stream_url || null,
+      publish_point: data.publish_point || null,
+      cloud_transcoding: data.cloud_transcoding || false,
+      name: data.name || streamId,
+      id: streamId
+    };
+
+    if (streamInfo.stream_url) {
+      const tokenParams = buildTokenParams();
+      streamInfo.full_url = `${streamInfo.stream_url}?${tokenParams}`;
+      console.log('Stream Info:');
+      console.log(JSON.stringify(streamInfo, null, 2));
+      return streamInfo;
+    } else {
+      console.error('No stream_url found in response');
+      console.log('Response:', JSON.stringify(data, null, 2));
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching stream:', error.message);
+    return null;
+  }
+}
+
+function buildTokenParams() {
+  const accessToken = process.env.STREAM_ACCESS_TOKEN || 'RjRe88VxHoVizcElPfzieQJiAInoJFD5GEQoNGspwsuaW2HNjfTvA66zjIs5KOkZT1zjR1wWIZa';
+  const adminToken = process.env.STREAM_ADMIN_TOKEN || 'true';
+  return `dnt=true&access_token=${accessToken}&admin_token=${adminToken}`;
+}
+
+const streamId = process.argv[2] || STREAM_ID;
+getStreamUrl(streamId);
+</file>
+
+<file path="src/boro/boroAutomation.js">
+import { chromium } from '@playwright/test';
+
+const BORO_URL = process.env.BORO_URL || 'https://boro.elecard.com';
+const BORO_EMAIL = process.env.BORO_EMAIL;
+const BORO_PASSWORD = process.env.BORO_PASSWORD;
+
+export async function loginToBoro() {
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    console.log(`Navigating to ${BORO_URL}/users/sign_in`);
+    await page.goto(`${BORO_URL}/users/sign_in`);
+
+    await page.getByRole('textbox', { name: 'E-mail' }).fill(BORO_EMAIL);
+    await page.getByRole('textbox', { name: 'Password' }).fill(BORO_PASSWORD);
+    await page.getByRole('button', { name: 'Log In' }).click();
+
+    await page.waitForLoadState('networkidle');
+    console.log('Logged in to Boro successfully');
+
+    return { browser, context, page };
+  } catch (error) {
+    console.error('Login failed:', error.message);
+    await browser.close();
+    throw error;
+  }
+}
+
+export async function navigateToProject(page, projectName = 'Mediastream', probeName = 'CO - Boro') {
+  try {
+    await page.getByRole('link', { name: 'All projects' }).click();
+    await page.getByRole('link', { name: projectName }).click();
+    await page.locator('#toSidebar').click();
+    await page.getByRole('link', { name: probeName }).click();
+    console.log(`Navigated to ${probeName}`);
+    return true;
+  } catch (error) {
+    console.error('Navigation failed:', error.message);
+    return false;
+  }
+}
+
+export async function createOttTask(page, taskData) {
+  try {
+    await page.getByRole('button', { name: 'Add task' }).click();
+    await page.locator('#add_task_ott').click();
+    await page.locator('input[name="add_task_uri"]').fill(taskData.streamUrl);
+    await page.locator('input[name="add_task_name"]').fill(taskData.taskName);
+    await page.getByText('select profiles').click();
+
+    if (taskData.profiles && taskData.profiles.length > 0) {
+      for (const profile of taskData.profiles) {
+        await page.getByRole('checkbox', { name: profile, exact: true }).check();
+      }
+    }
+
+    await page.getByRole('button', { name: 'OK' }).click();
+
+    if (taskData.options) {
+      if (taskData.options.freeze) await page.locator('#add_task_checkbox_freeze').check();
+      if (taskData.options.thumbnail) await page.locator('#add_task_checkbox_thumbnail').check();
+      if (taskData.options.audioAnalysis) await page.locator('#add_task_checkbox_audioAnalysis').check();
+      if (taskData.options.audioDecodability) await page.locator('#add_task_checkbox_audioDecodability').check();
+    }
+
+    await page.getByRole('button', { name: 'Start' }).click();
+    console.log(`Task "${taskData.taskName}" created successfully`);
+    return true;
+  } catch (error) {
+    console.error('Error creating task:', error.message);
+    return false;
+  }
+}
+
+export async function createTask(page, taskName, streamUrl, options = {}) {
+  return createOttTask(page, {
+    taskName,
+    streamUrl,
+    profiles: options.profiles || ['soporte_boro'],
+    options: {
+      freeze: true,
+      thumbnail: true,
+      audioAnalysis: true,
+      audioDecodability: true,
+      ...options
+    }
+  });
+}
+
+export async function listTasks(page) {
+  try {
+    await page.waitForLoadState('networkidle');
+    console.log('Tasks listed');
+    return true;
+  } catch (error) {
+    console.error('Error listing tasks:', error.message);
+    return [];
+  }
+}
+
+export async function getTaskStatus(page, taskName) {
+  try {
+    await page.waitForLoadState('networkidle');
+    console.log(`Task "${taskName}" status check`);
+    return 'Active';
+  } catch (error) {
+    console.error('Error getting task status:', error.message);
+    return 'Error';
+  }
+}
+</file>
+
+<file path="styles.css">
+/* ============================================================
+   Boro · Live Streams — design tokens & global styles
+   ============================================================ */
+
+:root {
+  --font-sans: "Plus Jakarta Sans", "Manrope", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t-fast: 140ms;
+  --t-base: 220ms;
+  --t-slow: 360ms;
+}
+
+:root,
+[data-theme="dark"] {
+  --bg: #0A1020;
+  --bg-grad: radial-gradient(1200px 800px at 80% -10%, rgba(0,212,242,.06), transparent 60%),
+             radial-gradient(900px 700px at -10% 110%, rgba(89, 84, 255, .05), transparent 60%),
+             #0A1020;
+  --surface: #111A2E;
+  --surface-2: #16223B;
+  --surface-3: #1C2A47;
+  --border: rgba(255,255,255,.07);
+  --border-strong: rgba(255,255,255,.14);
+  --text: #EAF0FB;
+  --text-dim: #A4B1CC;
+  --text-mute: #6E7C99;
+  --accent: #25E0FF;
+  --accent-ink: #051820;
+  --accent-soft: rgba(37, 224, 255, .14);
+  --online: #2EE6A6;
+  --online-glow: rgba(46, 230, 166, .55);
+  --offline: #6E7C99;
+  --danger: #FF6A82;
+  --warn: #FFB547;
+  --shadow-card: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 24px -12px rgba(0,0,0,.6);
+  --shadow-pop: 0 20px 50px -20px rgba(0,0,0,.7);
+  --thumb-bg: linear-gradient(135deg, #182542 0%, #0E1830 100%);
+  --code-bg: rgba(37, 224, 255, .07);
+  --code-ink: #6BE9FF;
+}
+
+[data-theme="light"] {
+  --bg: #F4F6FB;
+  --bg-grad: radial-gradient(1100px 700px at 85% -10%, rgba(0,153,184,.07), transparent 60%),
+             radial-gradient(900px 700px at -10% 110%, rgba(89, 84, 255, .05), transparent 60%),
+             #F4F6FB;
+  --surface: #FFFFFF;
+  --surface-2: #F7F9FD;
+  --surface-3: #EEF2F8;
+  --border: rgba(15,26,46,.08);
+  --border-strong: rgba(15,26,46,.16);
+  --text: #0E1A2E;
+  --text-dim: #3D4A66;
+  --text-mute: #788299;
+  --accent: #0093B0;
+  --accent-ink: #FFFFFF;
+  --accent-soft: rgba(0, 147, 176, .12);
+  --online: #12B071;
+  --online-glow: rgba(18, 176, 113, .45);
+  --offline: #98A1B5;
+  --danger: #D8425A;
+  --warn: #C77900;
+  --shadow-card: 0 1px 0 rgba(255,255,255,.6) inset, 0 1px 2px rgba(15,26,46,.04), 0 8px 22px -14px rgba(15,26,46,.18);
+  --shadow-pop: 0 18px 50px -20px rgba(15,26,46,.28);
+  --thumb-bg: linear-gradient(135deg, #E9EFF7 0%, #D9E2F0 100%);
+  --code-bg: rgba(0, 147, 176, .08);
+  --code-ink: #006C82;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+body {
+  background: var(--bg-grad);
+  background-attachment: fixed;
+  transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* ============================================================
+   App shell
+   ============================================================ */
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  transition: grid-template-columns var(--t-slow) var(--ease);
+}
+
+.app[data-sidebar="closed"] {
+  grid-template-columns: 0 1fr;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+[data-theme="dark"] .sidebar { background: #0C1426; }
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 22px 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  font-size: 16px;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent), #5358FF 40%));
+  display: grid;
+  place-items: center;
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -.02em;
+  box-shadow: 0 6px 18px -8px var(--accent);
+}
+
+.brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-text span:last-child { font-size: 11px; font-weight: 500; color: var(--text-mute); letter-spacing: .04em; text-transform: uppercase; }
+
+.sidebar-section { padding: 6px 14px; }
+
+.sidebar-section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  padding: 14px 10px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-section-title .count { font-size: 11px; color: var(--text-mute); letter-spacing: 0; text-transform: none; }
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+  position: relative;
+}
+
+.account-row:hover { background: var(--surface-2); }
+.account-row[data-active="true"] { background: var(--surface-2); }
+.account-row[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+}
+
+.account-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+  letter-spacing: -.02em;
+  background: var(--surface-3);
+}
+
+.account-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+
+.account-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -.01em;
+}
+
+.account-meta {
+  font-size: 11px;
+  color: var(--text-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.account-row[data-active="true"] .account-check { opacity: 1; transform: scale(1); }
+.account-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(.7);
+  transition: all var(--t-base) var(--ease);
+}
+
+.add-account-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 10px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all var(--t-fast) var(--ease);
+  background: transparent;
+}
+
+.add-account-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.account-row .row-edit {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--text-mute);
+  flex-shrink: 0;
+  transition: all var(--t-fast) var(--ease);
+  background: transparent;
+}
+.account-row:hover .row-edit { opacity: 1; }
+.account-row .row-edit:hover { background: var(--surface-3); color: var(--text); }
+
+/* danger button in modal */
+.btn-danger {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent);
+  background: transparent;
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--t-fast) var(--ease);
+}
+.btn-danger:hover { background: color-mix(in oklab, var(--danger) 12%, transparent); border-color: var(--danger); }
+
+.sidebar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+.sidebar-foot {
+  margin-top: auto;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.foot-user { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.foot-user .account-avatar { background: linear-gradient(135deg, #5358FF, #25E0FF); color: #fff; }
+.foot-user-name { font-size: 13px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.foot-user-mail { font-size: 11px; color: var(--text-mute); }
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  transition: all var(--t-fast) var(--ease);
+  background: transparent;
+  border: 1px solid transparent;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+
+/* ============================================================
+   Main pane
+   ============================================================ */
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 32px;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.hamburger {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: all var(--t-fast) var(--ease);
+}
+.hamburger:hover { background: var(--surface-2); border-color: var(--border-strong); }
+
+.page-title { display: flex; flex-direction: column; line-height: 1.1; }
+.page-title h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+.page-title .breadcrumb { font-size: 12px; color: var(--text-mute); margin-top: 3px; font-weight: 500; }
+.page-title .breadcrumb b { color: var(--text-dim); font-weight: 600; }
+
+.search {
+  flex: 1;
+  max-width: 460px;
+  position: relative;
+  margin-left: 16px;
+}
+.search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 40px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+  transition: all var(--t-fast) var(--ease);
+}
+.search input::placeholder { color: var(--text-mute); }
+.search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); background: var(--surface); }
+.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-mute); pointer-events: none; }
+.search .kbd {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  pointer-events: none;
+}
+
+.top-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.btn-primary {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -.005em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--t-fast) var(--ease);
+  box-shadow: 0 6px 18px -10px var(--accent);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 24px -10px var(--accent); }
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+.btn-ghost {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--t-fast) var(--ease);
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* ----- Filters ----- */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px;
+  gap: 2px;
+}
+
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all var(--t-fast) var(--ease);
+  white-space: nowrap;
+}
+.chip:hover { color: var(--text); background: var(--surface-2); }
+.chip[data-active="true"] { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, 0 1px 2px rgba(0,0,0,.06); }
+.chip .dot-mini { width: 7px; height: 7px; border-radius: 50%; }
+.chip .pill-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-mute);
+  background: var(--surface-3);
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 2px;
+}
+.chip[data-active="true"] .pill-count { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
+
+.results-info { margin-left: auto; font-size: 12.5px; color: var(--text-mute); display: flex; align-items: center; gap: 12px; }
+.results-info b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Card grid
+   ============================================================ */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+  padding: 22px 32px 80px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+  box-shadow: var(--shadow-card);
+}
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  box-shadow: 0 24px 50px -28px rgba(0,0,0,.55), 0 0 0 1px var(--accent-soft);
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--thumb-bg);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% 130%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, transparent 50%, rgba(0,0,0,.32) 100%);
+  pointer-events: none;
+}
+.thumb-icon { color: var(--text-mute); opacity: .35; }
+
+.thumb-wave {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(90deg, color-mix(in oklab, var(--text-mute) 18%, transparent) 0 1px, transparent 1px 14px);
+  mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+  opacity: .25;
+}
+
+.thumb-tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: rgba(10,16,32,.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.1);
+  color: #fff;
+}
+.thumb-tag .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--online);
+  box-shadow: 0 0 0 0 var(--online-glow);
+  animation: pulse 1.8s ease-out infinite;
+}
+.thumb-tag[data-status="offline"] { color: rgba(255,255,255,.75); background: rgba(10,16,32,.45); }
+.thumb-tag[data-status="offline"] .dot { background: var(--offline); animation: none; box-shadow: none; }
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 var(--online-glow); }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.thumb-region {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: .04em;
+  background: rgba(10,16,32,.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #DDE7FB;
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.card-body { padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  line-height: 1.25;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-meta { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.card-meta .sep { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .45; }
+.card-meta .mono { font-family: var(--font-mono); letter-spacing: -.02em; }
+
+.url-row {
+  display: flex;
+  align-items: center;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0;
+  height: 34px;
+  overflow: hidden;
+}
+.url-row code {
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--code-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -.02em;
+  line-height: 34px;
+}
+.url-row .copy-mini {
+  height: 100%;
+  width: 38px;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  border-left: 1px solid var(--border);
+  transition: all var(--t-fast) var(--ease);
+}
+.url-row .copy-mini:hover { background: var(--surface-2); color: var(--accent); }
+
+.card-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
+
+.act {
+  height: 34px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  transition: all var(--t-fast) var(--ease);
+  white-space: nowrap;
+  padding: 0 10px;
+}
+.act:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-3); }
+.act.act-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.act.act-primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 8px 22px -12px var(--accent); }
+
+/* ============================================================
+   Modals
+   ============================================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, #0A1020 60%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  animation: fade-in .2s ease-out;
+}
+
+[data-theme="light"] .modal-backdrop { background: color-mix(in oklab, #0E1A2E 35%, transparent); }
+
+.modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: pop-in .26s var(--ease);
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-head {
+  padding: 20px 22px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-head h3 { margin: 0; font-size: 17px; letter-spacing: -.02em; font-weight: 700; }
+.modal-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-mute); }
+
+.modal-body { padding: 14px 22px 8px; display: flex; flex-direction: column; gap: 12px; }
+.modal-foot { padding: 12px 22px 18px; display: flex; justify-content: flex-end; gap: 8px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--text-dim); letter-spacing: -.005em; }
+.field input, .field textarea, .field select {
+  height: 40px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0 12px;
+  font-size: 13.5px;
+  outline: none;
+  transition: all var(--t-fast) var(--ease);
+}
+.field textarea { height: 78px; padding: 10px 12px; resize: none; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+.field select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(160,177,204,.8)' d='M0 0h10L5 6z'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.field input:focus, .field textarea:focus, .field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  background: var(--surface);
+}
+.field .hint { font-size: 11.5px; color: var(--text-mute); }
+.field input[readonly] { cursor: default; opacity: .7; }
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+.toast-tray {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: 9px 16px 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+  animation: toast-in .28s var(--ease);
+  white-space: nowrap;
+}
+
+.toast .icon-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--online);
+  color: #06251A;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--online) 25%, transparent);
+  flex-shrink: 0;
+}
+
+.toast[data-type="error"] .icon-badge {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 25%, transparent);
+}
+
+.toast[data-type="info"] .icon-badge {
+  background: var(--warn);
+  color: #000;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warn) 25%, transparent);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+
+.empty {
+  grid-column: 1 / -1;
+  padding: 80px 20px;
+  text-align: center;
+  color: var(--text-mute);
+  line-height: 1.6;
+}
+
+.empty .btn-primary {
+  margin-top: 16px;
+}
+
+/* ============================================================
+   Loading / spin
+   ============================================================ */
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .9s linear infinite; }
+
+/* ============================================================
+   Small screens
+   ============================================================ */
+
+@media (max-width: 880px) {
+  .app { grid-template-columns: 0 1fr; }
+  .app[data-sidebar="open"] { grid-template-columns: 100vw 0; }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 86vw;
+    max-width: 320px;
+    z-index: 60;
+    border-right: 1px solid var(--border);
+  }
+  .topbar { padding: 14px 18px; flex-wrap: wrap; }
+  .search { order: 4; max-width: none; flex-basis: 100%; margin: 6px 0 0; }
+  .filter-bar { padding: 12px 18px; }
+  .grid { padding: 16px 18px 60px; }
+}
+</file>
+
+<file path="tests/create-live-stream.spec.js">
+import { test, expect } from '@playwright/test';
+
+test('Crear señal en vivo para monitoreo', async ({ page }) => {
+  await page.goto('https://boro.elecard.com/users/sign_in');
+  await page.getByRole('textbox', { name: 'E-mail' }).click();
+  await page.getByRole('textbox', { name: 'E-mail' }).fill(process.env.BORO_EMAIL);
+  await page.getByRole('textbox', { name: 'Password' }).click();
+  await page.getByRole('textbox', { name: 'Password' }).fill(process.env.BORO_PASSWORD);
+  await page.getByRole('button', { name: 'Log In' }).click();
+  await page.getByRole('link', { name: 'All projects' }).click();
+  await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+  await page.locator('#toSidebar').click();
+  await page.getByRole('link', { name: 'CO - Boro' }).click();
+  await page.locator('#sidebar_probe_8552').getByRole('link', { name: 'CO - Boro' }).click();
+  await page.getByRole('button', { name: 'Add task' }).click();
+  await page.locator('#add_task_ott').click();
+  await page.locator('input[name="add_task_uri"]').click();
+  await page.locator('input[name="add_task_uri"]').fill('http://prueba.m3u8');
+  await page.locator('input[name="add_task_name"]').click();
+  await page.locator('input[name="add_task_name"]').fill('test');
+  await page.getByText('select profiles').click();
+  await page.locator('label').filter({ hasText: 'soporte' }).nth(2).click();
+  await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.locator('#add_task_checkbox_freeze').check();
+  await page.locator('#add_task_checkbox_thumbnail').check();
+  await page.locator('#add_task_checkbox_audioAnalysis').check();
+  await page.locator('#add_task_checkbox_audioDecodability').check();
+  await page.getByRole('button', { name: 'Start' }).click();
+});
+</file>
+
+<file path=".env.example">
+# Configuración de API Mediastre.am
+# Base URL del ambiente de Mediastream (sin path)
+# Producción: https://platform.mediastre.am
+# Pruebas:    https://dev.platform.mediastre.am
+MEDIASTREAM_API_URL=https://dev.platform.mediastre.am
+MEDIASTREAM_COOKIE=your_cookie_here
+
+# Configuración de Boro Elecard
+BORO_URL=https://boro.elecard.com
+BORO_EMAIL=tu_email@ejemplo.com
+BORO_PASSWORD=tu_password
+
+# Token de acceso para el stream (legacy CLI scripts)
+STREAM_ACCESS_TOKEN=your_token_here
+STREAM_ADMIN_TOKEN=true
+</file>
+
+<file path="components.jsx">
+// Boro · Live Streams — UI components
+const { useState, useEffect, useRef } = React;
+
+/* ----------------------------- Icons ----------------------------- */
+
+const Icon = {
+  Menu: (p) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...p}><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>,
+  Search: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>,
+  Plus: (p) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" {...p}><path d="M12 5v14M5 12h14"/></svg>,
+  Refresh: (p) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>,
+  Check: (p) => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="5 12 10 17 19 8"/></svg>,
+  Copy: (p) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>,
+  Upload: (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 15v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+  Close: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...p}><path d="M6 6l12 12M6 18 18 6"/></svg>,
+  Video: (p) => <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="3" y="6" width="14" height="12" rx="2"/><path d="m17 10 4-2v8l-4-2z"/></svg>,
+  Audio: (p) => <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>,
+  Sun: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...p}><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>,
+  Moon: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 12.8A8.6 8.6 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8z"/></svg>,
+  Settings: (p) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .4 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.4 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.4l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .4-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.4-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.4H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.4l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.4 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>,
+  AlertCircle: (p) => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  Loader: ({ className = '', ...p }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`spin ${className}`} {...p}><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>,
+  Pencil: (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Trash: (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
+};
+
+/* ----------------------------- Toast tray ----------------------------- */
+
+function ToastTray({ toasts }) {
+  return (
+    <div className="toast-tray">
+      {toasts.map((t) => (
+        <div key={t.id} className="toast" data-type={t.type || 'ok'}>
+          <span className="icon-badge">
+            {t.type === 'error' ? <Icon.AlertCircle /> : t.type === 'info' ? <Icon.Loader /> : <Icon.Check />}
+          </span>
+          <span>{t.msg}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ----------------------------- Card thumbnail ----------------------------- */
+
+function CardThumb({ live }) {
+  const isAudio = live.thumbType === 'audio';
+  return (
+    <div className="thumb">
+      <div className="thumb-wave" />
+      <div className="thumb-icon">
+        {isAudio ? <Icon.Audio /> : <Icon.Video />}
+      </div>
+      <span className="thumb-tag" data-status={live.status}>
+        <span className="dot" />
+        {live.status === 'online' ? 'LIVE' : 'Offline'}
+      </span>
+      <span className="thumb-region">{live.region}</span>
+    </div>
+  );
+}
+
+/* ----------------------------- Live card ----------------------------- */
+
+function LiveCard({ live, onCopy, onUpload, submitting }) {
+  const url = `https://mdstrm.com/live-stream-playlist/${live.id}.m3u8`;
+  const shortId = live.id.slice(0, 8) + '…' + live.id.slice(-4);
+
+  return (
+    <article className="card" data-status={live.status}>
+      <CardThumb live={live} />
+      <div className="card-body">
+        <h3 className="card-title">{live.name}</h3>
+        <div className="card-meta">
+          <span className="mono">{shortId}</span>
+          <span className="sep" />
+          <span>{live.status === 'online' ? 'Activo ahora' : 'Sin emisión'}</span>
+        </div>
+        <div className="url-row" title={url}>
+          <code>{url}</code>
+          <button className="copy-mini" onClick={() => onCopy(url, '.m3u8 copiado al portapapeles')} aria-label="Copiar URL">
+            <Icon.Copy />
+          </button>
+        </div>
+        <div className="card-actions">
+          <button className="act" onClick={() => onCopy(live.id, 'ID copiado al portapapeles')}>
+            <Icon.Copy /> Copiar ID
+          </button>
+          <button className="act" onClick={() => onCopy(url, '.m3u8 copiado al portapapeles')}>
+            <Icon.Copy /> .m3u8
+          </button>
+          <button
+            className="act act-primary"
+            onClick={() => onUpload(live)}
+            disabled={submitting}
+            title="Subir señal a Boro"
+          >
+            {submitting ? <Icon.Loader /> : <Icon.Upload />}
+            Subir
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/* ----------------------------- Sidebar ----------------------------- */
+
+function Sidebar({ accounts, activeId, onSelect, onAdd, onEdit }) {
+  return (
+    <aside className="sidebar" aria-label="Cuentas">
+      <div className="sidebar-head">
+        <div className="brand">
+          <div className="brand-mark">B</div>
+          <div className="brand-text">
+            <span>Boro</span>
+            <span>Live Signals</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="sidebar-scroll">
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">
+            <span>Cuentas</span>
+            <span className="count">{accounts.length}</span>
+          </div>
+
+          {accounts.map((a) => (
+            <div
+              key={a.id}
+              className="account-row"
+              data-active={a.id === activeId}
+              onClick={() => onSelect(a.id)}
+            >
+              <div
+                className="account-avatar"
+                style={{ background: `linear-gradient(135deg, ${a.color}, color-mix(in oklab, ${a.color}, #000 30%))`, color: '#0A1020' }}
+              >
+                {a.initials}
+              </div>
+              <div className="account-info">
+                <div className="account-name">{a.name}</div>
+                <div className="account-meta">{a.meta}</div>
+              </div>
+              <button
+                className="row-edit"
+                onClick={(e) => { e.stopPropagation(); onEdit(a.id); }}
+                aria-label="Editar cuenta"
+                title="Editar"
+              >
+                <Icon.Pencil />
+              </button>
+              <div className="account-check"><Icon.Check /></div>
+            </div>
+          ))}
+
+          <button className="add-account-btn" onClick={onAdd}>
+            <Icon.Plus /> Agregar cuenta
+          </button>
+        </div>
+      </div>
+
+      <div className="sidebar-foot">
+        <div className="foot-user">
+          <div className="account-avatar" style={{ background: 'linear-gradient(135deg, #5358FF, #25E0FF)', color: '#fff' }}>MS</div>
+          <div style={{ minWidth: 0 }}>
+            <div className="foot-user-name">Mediastream</div>
+            <div className="foot-user-mail">boro.elecard.com</div>
+          </div>
+        </div>
+        <button className="icon-btn" aria-label="Ajustes"><Icon.Settings /></button>
+      </div>
+    </aside>
+  );
+}
+
+/* ----------------------------- Add account modal ----------------------------- */
+
+const ACCOUNT_COLORS = ['#25E0FF', '#5358FF', '#FF8FA3', '#FFB547', '#2EE6A6', '#FF6A82'];
+
+function AddAccountModal({ onClose, onSave, existingCount = 0, initialData = null, onDelete }) {
+  const isEdit = !!initialData;
+  const [name, setName] = useState(initialData?.name || '');
+  const [region, setRegion] = useState(initialData?.region || 'LATAM');
+  const [token, setToken] = useState(initialData?.token || '');
+  const [apiKey, setApiKey] = useState(initialData?.apiKey || '');
+  const [color, setColor] = useState(initialData?.color || ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    const k = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+
+  const canSave = name.trim() && token.trim();
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <h3>{isEdit ? 'Editar cuenta' : 'Agregar cuenta de Mediastream'}</h3>
+            <p>{isEdit ? name : 'Conecta una cuenta para listar sus señales en vivo.'}</p>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><Icon.Close /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label htmlFor="acct-name">Nombre de la cuenta</label>
+            <input
+              ref={inputRef}
+              id="acct-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej. Mediastream Producción"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="acct-region">Región</label>
+            <input
+              id="acct-region"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="Ej. LATAM, US, EU"
+            />
+            <span className="hint">Se usa como etiqueta en las señales de esta cuenta.</span>
+          </div>
+          <div className="field">
+            <label>Color</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {ACCOUNT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: c,
+                    border: color === c ? '2px solid var(--text)' : '2px solid transparent',
+                    boxShadow: color === c ? `0 0 0 3px color-mix(in oklab, ${c} 30%, transparent)` : 'none',
+                    transition: 'all .14s',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="acct-token">JWT Token (API)</label>
+            <textarea
+              id="acct-token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
+            />
+            <span className="hint">Para listar streams vía API.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="acct-api-key">API Key (para tokens HLS)</label>
+            <input
+              id="acct-api-key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="aa7c4501cb56d706ee57afbcd56449b6 (opcional)"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            />
+            <span className="hint">Token para POST /api/access/issue — genera URLs de consumo HLS con acceso temporal.</span>
+          </div>
+        </div>
+        <div className="modal-foot">
+          {isEdit && onDelete && (
+            confirmDelete ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginRight: 'auto' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>¿Eliminar cuenta?</span>
+                <button className="btn-danger" onClick={() => onDelete(initialData.id)}>
+                  <Icon.Trash /> Confirmar
+                </button>
+                <button className="btn-ghost" onClick={() => setConfirmDelete(false)}>No</button>
+              </div>
+            ) : (
+              <button className="btn-danger" style={{ marginRight: 'auto' }} onClick={() => setConfirmDelete(true)}>
+                <Icon.Trash /> Eliminar
+              </button>
+            )
+          )}
+          <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary"
+            onClick={() => canSave && onSave({ name: name.trim(), region: region.trim() || 'GLOBAL', token: token.trim(), apiKey: apiKey.trim(), color })}
+            disabled={!canSave}
+          >
+            {isEdit ? <><Icon.Check /> Guardar cambios</> : <><Icon.Plus /> Conectar cuenta</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------- Boro submit modal ----------------------------- */
+
+const BORO_ZONES = [
+  'CO - Boro',
+  'BR-SaoPaulo-Sensay',
+  'CL-VMSensay',
+  'EU-EC2 Boro (Spain)',
+  'PE-EC2-Lima',
+  'US-EC2-Boro',
+  'US-Link-SRT',
+];
+
+const SIGNAL_TYPES = [
+  { value: 'hls-video', label: 'HLS Video (.m3u8)',  placeholder: null },
+  { value: 'hls-audio', label: 'Audio HLS (.m3u8)',  placeholder: null },
+  { value: 'srt',       label: 'SRT',                placeholder: 'srt://host:port?streamid=...' },
+  { value: 'rtmp',      label: 'RTMP',               placeholder: 'rtmp://host/app/streamkey' },
+  { value: 'udp',       label: 'UDP / RTP',          placeholder: 'udp://host:port' },
+];
+
+function BoroModal({ target, onClose, onSubmit, submitting }) {
+  const { useState: _useState, useEffect: _useEffect } = React;
+  const [zone, setZone] = _useState(BORO_ZONES[0]);
+  const [signalType, setSignalType] = _useState('hls-video');
+  const [url, setUrl] = _useState('');
+  const [fetchingToken, setFetchingToken] = _useState(false);
+  const [tokenError, setTokenError] = _useState(null);
+
+  const isHls = signalType === 'hls-video' || signalType === 'hls-audio';
+
+  async function issueToken() {
+    if (!target.apiKey || !target.id) {
+      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      if (!target.apiKey) setTokenError('Sin API Key — URL sin token de acceso.');
+      return;
+    }
+    setFetchingToken(true);
+    setTokenError(null);
+    try {
+      const res = await fetch('/api/issue-access-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: target.apiKey, streamId: target.id }),
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8?access_token=${data.access_token}`);
+        setTokenError(null);
+      } else {
+        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+        setTokenError(`Error: ${data.error || 'no se pudo emitir token'}`);
+      }
+    } catch (e) {
+      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      setTokenError(`Error de red: ${e.message}`);
+    } finally {
+      setFetchingToken(false);
+    }
+  }
+
+  _useEffect(() => {
+    if (isHls) {
+      issueToken();
+    } else {
+      const t = SIGNAL_TYPES.find((s) => s.value === signalType);
+      setUrl(t?.placeholder || '');
+      setTokenError(null);
+    }
+  }, [signalType]);
+
+  _useEffect(() => {
+    const k = (e) => { if (e.key === 'Escape' && !submitting) onClose(); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose, submitting]);
+
+  const canSubmit = url.trim().length > 0 && !fetchingToken;
+
+  return (
+    <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ maxWidth: 500 }}>
+        <div className="modal-head">
+          <div>
+            <h3>Subir señal a Boro</h3>
+            <p>{target.name}</p>
+          </div>
+          <button className="icon-btn" onClick={onClose} disabled={submitting} aria-label="Cerrar">
+            <Icon.Close />
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label htmlFor="boro-signal-type">Tipo de señal</label>
+            <select
+              id="boro-signal-type"
+              value={signalType}
+              onChange={(e) => setSignalType(e.target.value)}
+              disabled={submitting || fetchingToken}
+            >
+              {SIGNAL_TYPES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label htmlFor="boro-url" style={{ margin: 0 }}>
+                URL de la señal
+                {fetchingToken && <Icon.Loader style={{ marginLeft: 6, verticalAlign: 'middle' }} />}
+              </label>
+              {isHls && (
+                <button
+                  type="button"
+                  onClick={issueToken}
+                  disabled={fetchingToken || submitting}
+                  style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  {fetchingToken ? 'Generando…' : '↺ Regenerar token'}
+                </button>
+              )}
+            </div>
+            <input
+              id="boro-url"
+              value={fetchingToken ? 'Generando URL con token…' : url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={submitting || fetchingToken}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}
+              placeholder={SIGNAL_TYPES.find((s) => s.value === signalType)?.placeholder || ''}
+            />
+            {tokenError && (
+              <span className="hint" style={{ color: 'var(--warn)' }}>{tokenError}</span>
+            )}
+          </div>
+
+          <div className="field">
+            <label htmlFor="boro-zone">Zona / Probe</label>
+            <select
+              id="boro-zone"
+              value={zone}
+              onChange={(e) => setZone(e.target.value)}
+              disabled={submitting || fetchingToken}
+            >
+              {BORO_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose} disabled={submitting}>Cancelar</button>
+          <button
+            className="btn-primary"
+            onClick={() => onSubmit({ zone, signalType, url: url.trim() })}
+            disabled={submitting || !canSubmit}
+          >
+            {submitting ? <Icon.Loader /> : <Icon.Upload />}
+            {submitting ? 'Subiendo…' : 'Subir a Boro'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, {
+  Icon, ToastTray, LiveCard, Sidebar, AddAccountModal, BoroModal,
+  ACCOUNT_COLORS,
+});
+</file>
+
+<file path="app.jsx">
+// Boro · Live Streams — main app (connected to real APIs)
+const { useState, useEffect, useMemo } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark"
+}/*EDITMODE-END*/;
+
+const LS_KEY = 'boro_accounts';
+
+function loadAccounts() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveAccounts(accounts) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(accounts)); } catch {}
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [accounts, setAccounts] = useState(loadAccounts);
+  const [activeAccountId, setActiveAccountId] = useState(() => loadAccounts()[0]?.id || null);
+  const [streamsByAccount, setStreamsByAccount] = useState({});
+  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [boroTarget, setBoroTarget] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [toasts, setToasts] = useState([]);
+
+  const activeAccount = accounts.find((a) => a.id === activeAccountId) || null;
+  const streams = streamsByAccount[activeAccountId] || [];
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', t.theme || 'dark');
+  }, [t.theme]);
+
+  useEffect(() => {
+    if (activeAccount) fetchStreams(activeAccount);
+  }, [activeAccountId]);
+
+  async function fetchStreams(account) {
+    if (!account?.token) return;
+    setLoadingStreams(true);
+    try {
+      const res = await fetch('/api/live-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: account.token }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const mapped = (data.data || []).map((s) => ({
+        id: s._id || s.id,
+        name: s.name || 'Sin nombre',
+        status: (s.monitor?.status || s.status || 'offline').toLowerCase(),
+        region: account.region || 'GLOBAL',
+        key: s.key || null,
+        stream_url: s.stream_url || s.streamUrl || null,
+        publish_point: s.publish_point || s.publishPoint || null,
+        thumbType: /radio|audio/i.test(s.name || '') ? 'audio' : 'video',
+      }));
+      setStreamsByAccount((prev) => ({ ...prev, [account.id]: mapped }));
+    } catch (e) {
+      pushToast(`Error cargando streams: ${e.message}`, 'error');
+    } finally {
+      setLoadingStreams(false);
+    }
+  }
+
+  const regions = useMemo(() => {
+    const s = new Set(streams.map((l) => l.region));
+    return ['all', ...Array.from(s)];
+  }, [streams]);
+
+  const counts = useMemo(() => ({
+    all: streams.length,
+    online: streams.filter((l) => l.status === 'online').length,
+    offline: streams.filter((l) => l.status === 'offline').length,
+  }), [streams]);
+
+  const filtered = useMemo(() => streams.filter((l) => {
+    if (statusFilter !== 'all' && l.status !== statusFilter) return false;
+    if (regionFilter !== 'all' && l.region !== regionFilter) return false;
+    if (query.trim() && !l.name.toLowerCase().includes(query.trim().toLowerCase())) return false;
+    return true;
+  }), [streams, query, statusFilter, regionFilter]);
+
+  function pushToast(msg, type = 'ok') {
+    const id = Date.now() + Math.random();
+    setToasts((ts) => [...ts, { id, msg, type }]);
+    setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), type === 'error' ? 6000 : 2600);
+  }
+
+  function copyTo(text, msg) {
+    try { navigator.clipboard?.writeText(text); } catch {}
+    pushToast(msg);
+  }
+
+  async function handleBoroSubmit({ zone, signalType, url }) {
+    if (!boroTarget) return;
+    const target = boroTarget;
+    setBoroTarget(null);
+    setSubmitting(true);
+
+    try {
+      const res = await fetch('/api/submit-to-boro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamName: target.name, streamUrl: url, zone, signalType }),
+      });
+      const { jobId, position } = await res.json();
+
+      const posLabel = position > 0 ? ` · posición ${position + 1} en cola` : '';
+      pushToast(`En cola: "${target.name}" [${signalType}] → ${zone}${posLabel}`, 'info');
+
+      let done = false;
+      while (!done) {
+        const poll = await fetch(`/api/job/${jobId}`);
+        const data = await poll.json();
+        if (data.status === 'done') {
+          done = true;
+          if (data.success) {
+            pushToast(`✓ "${target.name}" subido a ${zone} exitosamente`);
+          } else {
+            pushToast(`Error en Boro: ${data.error}`, 'error');
+          }
+        }
+      }
+    } catch (e) {
+      pushToast(`Error de red: ${e.message}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleAddSave(account) {
+    const initials = account.name
+      .replace(/[^A-Za-z0-9]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '??';
+    const newAccount = { id: Date.now().toString(36), initials, ...account };
+    const updated = [...accounts, newAccount];
+    setAccounts(updated);
+    saveAccounts(updated);
+    setShowAdd(false);
+    setActiveAccountId(newAccount.id);
+    pushToast(`Cuenta "${account.name}" conectada`);
+  }
+
+  function handleEditSave(updated) {
+    const initials = updated.name
+      .replace(/[^A-Za-z0-9]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '??';
+    const updatedAccounts = accounts.map((a) =>
+      a.id === editingAccount.id ? { ...a, ...updated, initials } : a
+    );
+    setAccounts(updatedAccounts);
+    saveAccounts(updatedAccounts);
+    setEditingAccount(null);
+    pushToast(`Cuenta "${updated.name}" actualizada`);
+  }
+
+  function handleDeleteAccount(id) {
+    const updatedAccounts = accounts.filter((a) => a.id !== id);
+    setAccounts(updatedAccounts);
+    saveAccounts(updatedAccounts);
+    if (activeAccountId === id) {
+      setActiveAccountId(updatedAccounts[0]?.id || null);
+    }
+    setEditingAccount(null);
+    pushToast('Cuenta eliminada', 'info');
+  }
+
+  function handleSelectAccount(id) {
+    setActiveAccountId(id);
+    setStatusFilter('all');
+    setRegionFilter('all');
+    setQuery('');
+  }
+
+  const toggleTheme = () => setTweak('theme', t.theme === 'dark' ? 'light' : 'dark');
+
+  const accountsWithMeta = accounts.map((a) => ({
+    ...a,
+    meta: `${(streamsByAccount[a.id] || []).length} señales · ${a.region || 'GLOBAL'}`,
+  }));
+
+  return (
+    <div className="app" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+      {sidebarOpen && (
+        <Sidebar
+          accounts={accountsWithMeta}
+          activeId={activeAccountId}
+          onSelect={handleSelectAccount}
+          onAdd={() => setShowAdd(true)}
+          onEdit={(id) => setEditingAccount(accounts.find((a) => a.id === id) || null)}
+        />
+      )}
+
+      <main className="main">
+        <header className="topbar">
+          <button className="hamburger" onClick={() => setSidebarOpen((s) => !s)} aria-label="Menú">
+            <Icon.Menu />
+          </button>
+          <div className="page-title">
+            <h1>Live Streams</h1>
+            <div className="breadcrumb">
+              {activeAccount
+                ? <><b>{activeAccount.name}</b> · Señales activas</>
+                : 'Agrega una cuenta para comenzar'
+              }
+            </div>
+          </div>
+
+          <div className="search">
+            <Icon.Search />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por nombre…"
+            />
+            <span className="kbd">⌘ K</span>
+          </div>
+
+          <div className="top-actions">
+            <button className="btn-ghost" onClick={toggleTheme} aria-label="Cambiar tema">
+              {t.theme === 'dark' ? <Icon.Sun /> : <Icon.Moon />}
+              <span style={{ fontSize: 12 }}>{t.theme === 'dark' ? 'Claro' : 'Oscuro'}</span>
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={() => activeAccount && fetchStreams(activeAccount)}
+              disabled={loadingStreams || !activeAccount}
+            >
+              {loadingStreams ? <Icon.Loader /> : <Icon.Refresh />}
+              {loadingStreams ? 'Cargando…' : 'Refrescar'}
+            </button>
+          </div>
+        </header>
+
+        <div className="filter-bar">
+          <div className="filter-group" role="tablist" aria-label="Estado">
+            {[
+              { key: 'all',     label: 'Todos',   count: counts.all },
+              { key: 'online',  label: 'En vivo', count: counts.online,  dot: 'var(--online)' },
+              { key: 'offline', label: 'Offline', count: counts.offline, dot: 'var(--offline)' },
+            ].map(({ key, label, count, dot }) => (
+              <button key={key} className="chip" data-active={statusFilter === key} onClick={() => setStatusFilter(key)}>
+                {dot && <span className="dot-mini" style={{ background: dot }} />}
+                {label}
+                <span className="pill-count">{count}</span>
+              </button>
+            ))}
+          </div>
+
+          {regions.length > 1 && (
+            <div className="filter-group" role="tablist" aria-label="Región">
+              {regions.map((r) => (
+                <button key={r} className="chip" data-active={regionFilter === r} onClick={() => setRegionFilter(r)}>
+                  {r === 'all' ? 'Todas las regiones' : r}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="results-info">
+            <span><b>{filtered.length}</b> de {streams.length} señales</span>
+          </div>
+        </div>
+
+        <section className="grid">
+          {loadingStreams ? (
+            <div className="empty">
+              <Icon.Loader style={{ width: 28, height: 28, marginBottom: 12 }} />
+              <br />Cargando streams…
+            </div>
+          ) : !activeAccount ? (
+            <div className="empty">
+              Agrega una cuenta de Mediastream para ver sus señales en vivo.
+              <br />
+              <button className="btn-primary" onClick={() => setShowAdd(true)} style={{ marginTop: 16 }}>
+                <Icon.Plus /> Agregar cuenta
+              </button>
+            </div>
+          ) : streams.length === 0 ? (
+            <div className="empty">
+              No se encontraron streams para esta cuenta.
+              <br />Verifica que el token JWT sea válido.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty">No hay señales que coincidan con esos filtros.</div>
+          ) : (
+            filtered.map((live) => (
+              <LiveCard
+                key={live.id}
+                live={live}
+                onCopy={copyTo}
+                onUpload={(live) => setBoroTarget({
+                  id: live.id,
+                  name: live.name,
+                  stream_url: live.stream_url || null,
+                  apiKey: activeAccount?.apiKey || null,
+                })}
+                submitting={submitting}
+              />
+            ))
+          )}
+        </section>
+      </main>
+
+      {showAdd && (
+        <AddAccountModal
+          onClose={() => setShowAdd(false)}
+          onSave={handleAddSave}
+          existingCount={accounts.length}
+        />
+      )}
+
+      {editingAccount && (
+        <AddAccountModal
+          onClose={() => setEditingAccount(null)}
+          onSave={handleEditSave}
+          initialData={editingAccount}
+          onDelete={handleDeleteAccount}
+        />
+      )}
+
+      {boroTarget && (
+        <BoroModal
+          target={boroTarget}
+          onClose={() => setBoroTarget(null)}
+          onSubmit={handleBoroSubmit}
+          submitting={submitting}
+        />
+      )}
+
+      <ToastTray toasts={toasts} />
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Apariencia" />
+        <TweakRadio
+          label="Tema"
+          value={t.theme}
+          options={[{ label: 'Oscuro', value: 'dark' }, { label: 'Claro', value: 'light' }]}
+          onChange={(v) => setTweak('theme', v)}
+        />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</file>
+
+<file path="server.js">
+import express from 'express';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { EventEmitter } from 'events';
+import { chromium } from '@playwright/test';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(process.cwd(), 'data.json');
+
+const BORO_URL = process.env.BORO_URL || 'https://boro.elecard.com';
+const BORO_EMAIL = process.env.BORO_EMAIL || process.env.BORO_USERNAME;
+const BORO_PASSWORD = process.env.BORO_PASSWORD;
+const MS_API_BASE = process.env.MEDIASTREAM_API_URL
+  ? new URL(process.env.MEDIASTREAM_API_URL).origin
+  : 'https://dev.platform.mediastre.am';
+
+app.use(express.json());
+app.use(express.static('.'));
+
+const PROBE_IDS = {
+  'CO - Boro':           '8552',
+  'BR-SaoPaulo-Sensay':  '4933',
+  'CL-VMSensay':         '4957',
+  'EU-EC2 Boro (Spain)': '7892',
+  'PE-EC2-Lima':         '9593',
+  'US-EC2-Boro':         '8566',
+  'US-Link-SRT':         '6308',
+};
+
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  } catch {}
+  return { token: '', streams: [] };
+}
+
+function saveData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+// ============================================================
+// BoroSession — browser vive entre requests, login 1 sola vez
+// ============================================================
+
+class BoroSession {
+  constructor() {
+    this.browser = null;
+    this.context = null;
+    this.loggedIn = false;
+  }
+
+  async init() {
+    if (!this.browser) {
+      this.browser = await chromium.launch({ headless: true });
+      this.context = await this.browser.newContext();
+      console.log('[Boro] Browser launched');
+    }
+  }
+
+  async login() {
+    await this.init();
+    const page = await this.context.newPage();
+    try {
+      console.log('[Boro] Logging in...');
+      await page.goto(`${BORO_URL}/users/sign_in`);
+      await page.getByRole('textbox', { name: 'E-mail' }).fill(BORO_EMAIL);
+      await page.getByRole('textbox', { name: 'Password' }).fill(BORO_PASSWORD);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await page.waitForLoadState('networkidle');
+      this.loggedIn = true;
+      console.log('[Boro] Session established');
+    } finally {
+      await page.close();
+    }
+  }
+
+  async ensureLoggedIn() {
+    if (!this.loggedIn) await this.login();
+  }
+
+  async submitTask({ streamName, streamUrl, zone, signalType = 'hls-video' }) {
+    await this.ensureLoggedIn();
+    const probeId = PROBE_IDS[zone] || '8552';
+    const page = await this.context.newPage();
+
+    // Determinar qué checkboxes activar según tipo de señal
+    const isAudio = signalType === 'hls-audio';
+    const opts = {
+      freeze:           !isAudio,
+      thumbnail:        !isAudio,
+      audioAnalysis:    true,
+      audioDecodability: true,
+    };
+
+    try {
+      console.log(`[Boro] Submitting "${streamName}" [${signalType}] → ${zone} (probe: ${probeId})`);
+
+      await page.goto(`${BORO_URL}/projects`);
+
+      // Sesión expirada — redirect a login
+      if (page.url().includes('sign_in')) {
+        console.log('[Boro] Session expired, re-authenticating...');
+        this.loggedIn = false;
+        await page.close();
+        await this.login();
+        return this.submitTask({ streamName, streamUrl, zone, signalType });
+      }
+
+      await page.getByRole('link', { name: 'All projects' }).click();
+      await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+      await page.locator('#toSidebar').click();
+
+      await page.waitForTimeout(1000);
+      const zoneLink = page.locator(`#sidebar_probe_${probeId}`).getByRole('link', { name: zone });
+      await zoneLink.scrollIntoViewIfNeeded();
+      await zoneLink.click({ timeout: 10000 });
+
+      await page.waitForTimeout(2000);
+      await page.getByRole('button', { name: 'Add task' }).click();
+      await page.locator('#add_task_ott').click();
+      await page.locator('input[name="add_task_uri"]').fill(streamUrl);
+      await page.locator('input[name="add_task_name"]').fill(streamName);
+      await page.getByText('select profiles').click();
+      await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
+      await page.getByRole('button', { name: 'OK' }).click();
+
+      await page.waitForTimeout(500);
+      if (opts.freeze)            await page.locator('#add_task_checkbox_freeze').check();
+      if (opts.thumbnail)         await page.locator('#add_task_checkbox_thumbnail').check();
+      if (opts.audioAnalysis)     await page.locator('#add_task_checkbox_audioAnalysis').check();
+      if (opts.audioDecodability) await page.locator('#add_task_checkbox_audioDecodability').check();
+      await page.getByRole('button', { name: 'Start' }).click();
+
+      await page.waitForTimeout(3000);
+      console.log(`[Boro] Task "${streamName}" created successfully`);
+      return { success: true };
+
+    } catch (error) {
+      console.error('[Boro] Error:', error.message);
+      if (error.message.includes('sign_in') || error.message.includes('Timeout')) {
+        this.loggedIn = false;
+      }
+      throw error;
+    } finally {
+      await page.close();
+    }
+  }
+
+  async close() {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+      this.context = null;
+      this.loggedIn = false;
+      console.log('[Boro] Browser closed');
+    }
+  }
+}
+
+const boroSession = new BoroSession();
+
+// ============================================================
+// Job queue — procesa 1 a la vez, no hay Playwright concurrente
+// ============================================================
+
+const jobQueue = [];
+const jobEmitter = new EventEmitter();
+const jobResults = new Map(); // cache resultado para polling tardío
+let queueRunning = false;
+
+async function processQueue() {
+  if (queueRunning || jobQueue.length === 0) return;
+  queueRunning = true;
+  const job = jobQueue.shift();
+  console.log(`[Queue] Processing job ${job.id} (${jobQueue.length} in queue)`);
+  try {
+    const result = await boroSession.submitTask(job.data);
+    finishJob(job.id, result);
+  } catch (e) {
+    finishJob(job.id, { success: false, error: e.message });
+  } finally {
+    queueRunning = false;
+    processQueue();
+  }
+}
+
+function finishJob(id, result) {
+  jobResults.set(id, result);
+  jobEmitter.emit(id, result);
+  // limpiar resultado del cache después de 5 minutos
+  setTimeout(() => jobResults.delete(id), 5 * 60 * 1000);
+}
+
+// ============================================================
+// Routes
+// ============================================================
+
+app.get('/api/data', (req, res) => res.json(loadData()));
+
+app.post('/api/data', (req, res) => {
+  saveData(req.body);
+  res.json({ success: true });
+});
+
+app.post('/api/live-stream', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token requerido' });
+  try {
+    const response = await fetch(`${MS_API_BASE}/api/live-stream?all=true&limit=50&skip=0`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-API-Token': token,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    const data = await response.json();
+    saveData({ token, streams: data.data || [] });
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Encola el job, responde inmediatamente con jobId
+app.post('/api/submit-to-boro', (req, res) => {
+  const { streamName, streamUrl, zone, signalType } = req.body;
+  if (!streamName || !streamUrl) return res.status(400).json({ error: 'Faltan parámetros' });
+
+  const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const position = jobQueue.length;
+  jobQueue.push({ id: jobId, data: { streamName, streamUrl, zone, signalType } });
+  console.log(`[Queue] Job ${jobId} enqueued at position ${position}`);
+
+  res.json({ jobId, position });
+  processQueue();
+});
+
+// Long-poll: espera hasta 30s por resultado, responde 'pending' si no llega
+app.get('/api/job/:id', (req, res) => {
+  const { id } = req.params;
+
+  // Resultado ya disponible (polling tardío)
+  if (jobResults.has(id)) {
+    return res.json({ status: 'done', ...jobResults.get(id) });
+  }
+
+  const timer = setTimeout(() => {
+    jobEmitter.off(id, handler);
+    res.json({ status: 'pending' });
+  }, 30000);
+
+  const handler = (result) => {
+    clearTimeout(timer);
+    res.json({ status: 'done', ...result });
+  };
+
+  jobEmitter.once(id, handler);
+});
+
+// Proxy para emitir access token de consumo HLS desde Mediastream
+app.post('/api/issue-access-token', async (req, res) => {
+  const { apiKey, streamId } = req.body;
+  if (!apiKey || !streamId) return res.status(400).json({ error: 'apiKey y streamId requeridos' });
+  try {
+    const response = await fetch(
+      `${MS_API_BASE}/api/access/issue?type=live&max_use=10&token=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(streamId)}`,
+      { method: 'POST', redirect: 'follow' }
+    );
+    const data = await response.json();
+    if (data.status === 'OK') {
+      res.json({ access_token: data.access_token });
+    } else {
+      res.status(400).json({ error: data.message || 'Error emitiendo token' });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Graceful shutdown — cierra el browser de Playwright
+process.on('SIGTERM', async () => { await boroSession.close(); process.exit(0); });
+process.on('SIGINT',  async () => { await boroSession.close(); process.exit(0); });
+
+app.listen(PORT, () => {
+  console.log(`Server running: http://localhost:${PORT}`);
+});
+</file>
+
+</files>
