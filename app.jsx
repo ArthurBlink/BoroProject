@@ -34,6 +34,9 @@ function App() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
+  const [tab, setTab] = useState('live');
+  const [boroTasks, setBoroTasks] = useState([]);
+  const [loadingBoro, setLoadingBoro] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) || null;
@@ -74,6 +77,42 @@ function App() {
       pushToast(`Error cargando streams: ${e.message}`, 'error');
     } finally {
       setLoadingStreams(false);
+    }
+  }
+
+  async function fetchBoroTasks() {
+    setLoadingBoro(true);
+    try {
+      const res = await fetch('/api/boro/tasks');
+      const data = await res.json();
+      if (data.success) {
+        setBoroTasks(data.tasks);
+      } else {
+        pushToast(`Error: ${data.error}`, 'error');
+      }
+    } catch (e) {
+      pushToast(`Error de red: ${e.message}`, 'error');
+    } finally {
+      setLoadingBoro(false);
+    }
+  }
+
+  async function handleDeleteBoroTask(taskName, probeId, zone) {
+    try {
+      const res = await fetch('/api/boro/delete-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskName, probeId, zone }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        pushToast(`✓ "${taskName}" eliminada de Boro`);
+        fetchBoroTasks();
+      } else {
+        pushToast(`Error: ${data.error}`, 'error');
+      }
+    } catch (e) {
+      pushToast(`Error de red: ${e.message}`, 'error');
     }
   }
 
@@ -220,24 +259,32 @@ function App() {
             <Icon.Menu />
           </button>
           <div className="page-title">
-            <h1>Live Streams</h1>
+            <h1>{tab === 'live' ? 'Live Streams' : 'Lives Cargados'}</h1>
             <div className="breadcrumb">
-              {activeAccount
-                ? <><b>{activeAccount.name}</b> · Señales activas</>
-                : 'Agrega una cuenta para comenzar'
-              }
+              <button className="tab-btn" data-active={tab === 'live'} onClick={() => setTab('live')}>
+                Live Streams
+              </button>
+              <span className="sep" />
+              <button className="tab-btn" data-active={tab === 'boro'} onClick={() => { setTab('boro'); fetchBoroTasks(); }}>
+                Lives Cargados
+              </button>
+              {tab === 'live' && activeAccount && (
+                <><span className="sep" /><b>{activeAccount.name}</b> · Señales activas</>
+              )}
             </div>
           </div>
 
-          <div className="search">
-            <Icon.Search />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nombre…"
-            />
-            <span className="kbd">⌘ K</span>
-          </div>
+          {tab === 'live' && (
+            <div className="search">
+              <Icon.Search />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por nombre…"
+              />
+              <span className="kbd">⌘ K</span>
+            </div>
+          )}
 
           <div className="top-actions">
             <button className="btn-ghost" onClick={toggleTheme} aria-label="Cambiar tema">
@@ -255,74 +302,87 @@ function App() {
           </div>
         </header>
 
-        <div className="filter-bar">
-          <div className="filter-group" role="tablist" aria-label="Estado">
-            {[
-              { key: 'all',     label: 'Todos',   count: counts.all },
-              { key: 'online',  label: 'En vivo', count: counts.online,  dot: 'var(--online)' },
-              { key: 'offline', label: 'Offline', count: counts.offline, dot: 'var(--offline)' },
-            ].map(({ key, label, count, dot }) => (
-              <button key={key} className="chip" data-active={statusFilter === key} onClick={() => setStatusFilter(key)}>
-                {dot && <span className="dot-mini" style={{ background: dot }} />}
-                {label}
-                <span className="pill-count">{count}</span>
-              </button>
-            ))}
-          </div>
-
-          {regions.length > 1 && (
-            <div className="filter-group" role="tablist" aria-label="Región">
-              {regions.map((r) => (
-                <button key={r} className="chip" data-active={regionFilter === r} onClick={() => setRegionFilter(r)}>
-                  {r === 'all' ? 'Todas las regiones' : r}
+        {tab === 'live' && (
+          <div className="filter-bar">
+            <div className="filter-group" role="tablist" aria-label="Estado">
+              {[
+                { key: 'all',     label: 'Todos',   count: counts.all },
+                { key: 'online',  label: 'En vivo', count: counts.online,  dot: 'var(--online)' },
+                { key: 'offline', label: 'Offline', count: counts.offline, dot: 'var(--offline)' },
+              ].map(({ key, label, count, dot }) => (
+                <button key={key} className="chip" data-active={statusFilter === key} onClick={() => setStatusFilter(key)}>
+                  {dot && <span className="dot-mini" style={{ background: dot }} />}
+                  {label}
+                  <span className="pill-count">{count}</span>
                 </button>
               ))}
             </div>
-          )}
 
-          <div className="results-info">
-            <span><b>{filtered.length}</b> de {streams.length} señales</span>
+            {regions.length > 1 && (
+              <div className="filter-group" role="tablist" aria-label="Región">
+                {regions.map((r) => (
+                  <button key={r} className="chip" data-active={regionFilter === r} onClick={() => setRegionFilter(r)}>
+                    {r === 'all' ? 'Todas las regiones' : r}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="results-info">
+              <span><b>{filtered.length}</b> de {streams.length} señales</span>
+            </div>
           </div>
-        </div>
+        )}
 
-        <section className="grid">
-          {loadingStreams ? (
-            <div className="empty">
-              <Icon.Loader style={{ width: 28, height: 28, marginBottom: 12 }} />
-              <br />Cargando streams…
-            </div>
-          ) : !activeAccount ? (
-            <div className="empty">
-              Agrega una cuenta de Mediastream para ver sus señales en vivo.
-              <br />
-              <button className="btn-primary" onClick={() => setShowAdd(true)} style={{ marginTop: 16 }}>
-                <Icon.Plus /> Agregar cuenta
-              </button>
-            </div>
-          ) : streams.length === 0 ? (
-            <div className="empty">
-              No se encontraron streams para esta cuenta.
-              <br />Verifica que el token JWT sea válido.
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty">No hay señales que coincidan con esos filtros.</div>
-          ) : (
-            filtered.map((live) => (
-              <LiveCard
-                key={live.id}
-                live={live}
-                onCopy={copyTo}
-                onUpload={(live) => setBoroTarget({
-                  id: live.id,
-                  name: live.name,
-                  stream_url: live.stream_url || null,
-                  apiKey: activeAccount?.apiKey || null,
-                })}
-                submitting={submitting}
-              />
-            ))
-          )}
-        </section>
+        {tab === 'live' && (
+          <section className="grid">
+            {loadingStreams ? (
+              <div className="empty">
+                <Icon.Loader style={{ width: 28, height: 28, marginBottom: 12 }} />
+                <br />Cargando streams…
+              </div>
+            ) : !activeAccount ? (
+              <div className="empty">
+                Agrega una cuenta de Mediastream para ver sus señales en vivo.
+                <br />
+                <button className="btn-primary" onClick={() => setShowAdd(true)} style={{ marginTop: 16 }}>
+                  <Icon.Plus /> Agregar cuenta
+                </button>
+              </div>
+            ) : streams.length === 0 ? (
+              <div className="empty">
+                No se encontraron streams para esta cuenta.
+                <br />Verifica que el token JWT sea válido.
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="empty">No hay señales que coincidan con esos filtros.</div>
+            ) : (
+              filtered.map((live) => (
+                <LiveCard
+                  key={live.id}
+                  live={live}
+                  onCopy={copyTo}
+                  onUpload={(live) => setBoroTarget({
+                    id: live.id,
+                    name: live.name,
+                    stream_url: live.stream_url || null,
+                    apiKey: activeAccount?.apiKey || null,
+                  })}
+                  submitting={submitting}
+                />
+              ))
+            )}
+          </section>
+        )}
+
+        {tab === 'boro' && (
+          <BoroTaskList
+            tasks={boroTasks}
+            loading={loadingBoro}
+            onRefresh={fetchBoroTasks}
+            onDelete={handleDeleteBoroTask}
+          />
+        )}
       </main>
 
       {showAdd && (

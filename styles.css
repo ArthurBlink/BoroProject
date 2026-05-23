@@ -507,6 +507,139 @@ input, select, textarea {
 .results-info { margin-left: auto; font-size: 12.5px; color: var(--text-mute); display: flex; align-items: center; gap: 12px; }
 .results-info b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* ----- Tabs ----- */
+
+.breadcrumb .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-mute); opacity: .4; display: inline-block; margin: 0 6px; vertical-align: middle; }
+
+.tab-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 6px;
+  color: var(--text-mute);
+  transition: all var(--t-fast) var(--ease);
+  background: transparent;
+  border: 1px solid transparent;
+}
+.tab-btn:hover { color: var(--text-dim); background: var(--surface-2); }
+.tab-btn[data-active="true"] { color: var(--accent); background: var(--accent-soft); border-color: transparent; cursor: default; }
+
+/* ----- Boro task list ----- */
+
+.boro-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+.boro-tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.boro-tasks-header .results-info { margin-left: 0; }
+
+.boro-task-grid {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 32px 80px;
+  gap: 8px;
+}
+
+.boro-task-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: all var(--t-fast) var(--ease);
+}
+.boro-task-card:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+.boro-task-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.boro-task-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.boro-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+.boro-task-meta .sep { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .4; }
+
+.boro-task-zone {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.boro-task-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-mute);
+}
+
+.boro-task-status.status-active {
+  color: var(--online);
+  background: color-mix(in oklab, var(--online) 14%, transparent);
+}
+
+.boro-task-actions { flex-shrink: 0; }
+
+.act.act-danger {
+  height: 34px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in oklab, var(--danger) 35%, transparent);
+  background: transparent;
+  color: var(--danger);
+  transition: all var(--t-fast) var(--ease);
+  white-space: nowrap;
+  padding: 0 12px;
+}
+.act.act-danger:hover:not(:disabled) { background: color-mix(in oklab, var(--danger) 12%, transparent); border-color: var(--danger); }
+
+.confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+.confirm-delete .btn-danger { height: 30px; padding: 0 10px; font-size: 12px; }
+.confirm-delete .btn-ghost { height: 30px; padding: 0 10px; font-size: 12px; }
+
 /* ============================================================
    Card grid
    ============================================================ */
@@ -869,4 +1002,6 @@ input, select, textarea {
   .search { order: 4; max-width: none; flex-basis: 100%; margin: 6px 0 0; }
   .filter-bar { padding: 12px 18px; }
   .grid { padding: 16px 18px 60px; }
+  .boro-tasks-header { padding: 12px 18px; }
+  .boro-task-grid { padding: 12px 18px 60px; }
 }

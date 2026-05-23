@@ -63,6 +63,7 @@ export async function createOttTask(page, taskData) {
       if (taskData.options.thumbnail) await page.locator('#add_task_checkbox_thumbnail').check();
       if (taskData.options.audioAnalysis) await page.locator('#add_task_checkbox_audioAnalysis').check();
       if (taskData.options.audioDecodability) await page.locator('#add_task_checkbox_audioDecodability').check();
+
     }
 
     await page.getByRole('button', { name: 'Start' }).click();
@@ -75,13 +76,14 @@ export async function createOttTask(page, taskData) {
 }
 
 export async function createTask(page, taskName, streamUrl, options = {}) {
+  const isAudio = options.signalType === 'hls-audio';
   return createOttTask(page, {
     taskName,
     streamUrl,
-    profiles: options.profiles || ['soporte_boro'],
+    profiles: options.profiles || (isAudio ? ['SoporteAudio', 'soporte_boro_Audio'] : ['soporte', 'soporte_boro']),
     options: {
-      freeze: true,
-      thumbnail: true,
+      freeze: !isAudio,
+      thumbnail: !isAudio,
       audioAnalysis: true,
       audioDecodability: true,
       ...options

@@ -467,7 +467,87 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
   );
 }
 
+/* ----------------------------- Boro task list ----------------------------- */
+
+const BORO_PROBE_IDS = {
+  'CO - Boro': '8552',
+  'BR-SaoPaulo-Sensay': '4933',
+  'CL-VMSensay': '4957',
+  'EU-EC2 Boro (Spain)': '7892',
+  'PE-EC2-Lima': '9593',
+  'US-EC2-Boro': '8566',
+  'US-Link-SRT': '6308',
+};
+
+function BoroTaskList({ tasks, loading, onRefresh, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  return (
+    <div className="boro-tasks">
+      <div className="boro-tasks-header">
+          <span className="results-info">
+          <b>{tasks.length}</b> live{tasks.length !== 1 ? 's' : ''} cargado{tasks.length !== 1 ? 's' : ''}
+        </span>
+        <button className="btn-ghost" onClick={onRefresh} disabled={loading}>
+          {loading ? <Icon.Loader /> : <Icon.Refresh />}
+          {loading ? 'Cargando…' : 'Refrescar'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="empty">
+          <Icon.Loader style={{ width: 28, height: 28, marginBottom: 12 }} />
+          <br />Cargando lives subidos…
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="empty">
+          No hay lives cargados.
+          <br />Subí una señal desde la pestaña Live Streams.
+        </div>
+      ) : (
+        <div className="boro-task-grid">
+          {tasks.map((t, i) => (
+            <div key={i} className="boro-task-card">
+              <div className="boro-task-info">
+                <div className="boro-task-name">{t.name}</div>
+                <div className="boro-task-meta">
+                  <span className="boro-task-zone">{t.zone}</span>
+                  <span className="sep" />
+                  <span className={`boro-task-status ${t.status?.toLowerCase() === 'active' ? 'status-active' : ''}`}>
+                    {t.status}
+                  </span>
+                </div>
+              </div>
+              <div className="boro-task-actions">
+                {confirmDelete === i ? (
+                  <div className="confirm-delete">
+                    <span>¿Eliminar?</span>
+                    <button className="btn-danger" onClick={() => {
+                      const probeId = BORO_PROBE_IDS[t.zone];
+                      if (probeId) {
+                        onDelete(t.name, probeId, t.zone);
+                      }
+                      setConfirmDelete(null);
+                    }}>
+                      <Icon.Trash /> Confirmar
+                    </button>
+                    <button className="btn-ghost" onClick={() => setConfirmDelete(null)}>No</button>
+                  </div>
+                ) : (
+                  <button className="act act-danger" onClick={() => setConfirmDelete(i)} title="Eliminar tarea">
+                    <Icon.Trash /> Eliminar
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
-  Icon, ToastTray, LiveCard, Sidebar, AddAccountModal, BoroModal,
+  Icon, ToastTray, LiveCard, Sidebar, AddAccountModal, BoroModal, BoroTaskList,
   ACCOUNT_COLORS,
 });

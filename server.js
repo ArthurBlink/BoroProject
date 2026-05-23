@@ -32,6 +32,8 @@ const PROBE_IDS = {
   'US-Link-SRT':         '6308',
 };
 
+const SUBMITTED_FILE = path.join(process.cwd(), 'submitted-tasks.json');
+
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -41,6 +43,32 @@ function loadData() {
 
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function loadSubmittedTasks() {
+  try {
+    if (fs.existsSync(SUBMITTED_FILE)) return JSON.parse(fs.readFileSync(SUBMITTED_FILE, 'utf8'));
+  } catch {}
+  return [];
+}
+
+function saveSubmittedTasks(tasks) {
+  fs.writeFileSync(SUBMITTED_FILE, JSON.stringify(tasks, null, 2));
+}
+
+function addSubmittedTask(task) {
+  const tasks = loadSubmittedTasks();
+  const exists = tasks.some((t) => t.name === task.name && t.zone === task.zone);
+  if (!exists) {
+    tasks.push({ name: task.name, zone: task.zone, createdAt: new Date().toISOString() });
+    saveSubmittedTasks(tasks);
+  }
+}
+
+function removeSubmittedTask(taskName, zone) {
+  const tasks = loadSubmittedTasks();
+  const filtered = tasks.filter((t) => !(t.name === taskName && t.zone === zone));
+  saveSubmittedTasks(filtered);
 }
 
 // ============================================================
@@ -67,11 +95,15 @@ class BoroSession {
     const page = await this.context.newPage();
     try {
       console.log('[Boro] Logging in...');
-      await page.goto(`${BORO_URL}/users/sign_in`);
-      await page.getByRole('textbox', { name: 'E-mail' }).fill(BORO_EMAIL);
-      await page.getByRole('textbox', { name: 'Password' }).fill(BORO_PASSWORD);
-      await page.getByRole('button', { name: 'Log In' }).click();
+      await page.goto(`${BORO_URL}/users/sign_in`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(2000);
+
+      await page.locator('input[type="email"], input[name="user[email]"], #user_email').first().fill(BORO_EMAIL);
+      await page.locator('input[type="password"], input[name="user[password]"], #user_password').first().fill(BORO_PASSWORD);
+      await page.locator('button[type="submit"], input[type="submit"]').first().click();
       await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(2000);
+
       this.loggedIn = true;
       console.log('[Boro] Session established');
     } finally {
@@ -88,17 +120,14 @@ class BoroSession {
     const probeId = PROBE_IDS[zone] || '8552';
     const page = await this.context.newPage();
 
-    // Determinar qué checkboxes activar según tipo de señal
     const isAudio = signalType === 'hls-audio';
-    const opts = {
-      freeze:           !isAudio,
-      thumbnail:        !isAudio,
-      audioAnalysis:    true,
-      audioDecodability: true,
-    };
+    const profiles = isAudio
+      ? ['SoporteAudio', 'soporte_boro_Audio']
+      : ['soporte', 'soporte_boro'];
 
     try {
       console.log(`[Boro] Submitting "${streamName}" [${signalType}] → ${zone} (probe: ${probeId})`);
+      console.log(`[Boro] Profiles: ${profiles.join(', ')}`);
 
       await page.goto(`${BORO_URL}/projects`);
 
@@ -125,15 +154,27 @@ class BoroSession {
       await page.locator('#add_task_ott').click();
       await page.locator('input[name="add_task_uri"]').fill(streamUrl);
       await page.locator('input[name="add_task_name"]').fill(streamName);
+
+      // Seleccionar perfiles (ALARM + WEBHOOK)
       await page.getByText('select profiles').click();
-      await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
+      await page.waitForTimeout(500);
+      if (isAudio) {
+        await page.getByRole('checkbox', { name: 'SoporteAudio', exact: true }).check();
+        await page.getByRole('checkbox', { name: 'soporte_boro_Audio', exact: true }).check();
+      } else {
+        await page.locator('label').filter({ hasText: 'soporte' }).nth(2).click();
+        await page.getByRole('checkbox', { name: 'soporte_boro', exact: true }).check();
+      }
       await page.getByRole('button', { name: 'OK' }).click();
 
+      // QoE Options
       await page.waitForTimeout(500);
-      if (opts.freeze)            await page.locator('#add_task_checkbox_freeze').check();
-      if (opts.thumbnail)         await page.locator('#add_task_checkbox_thumbnail').check();
-      if (opts.audioAnalysis)     await page.locator('#add_task_checkbox_audioAnalysis').check();
-      if (opts.audioDecodability) await page.locator('#add_task_checkbox_audioDecodability').check();
+      if (!isAudio) {
+        await page.locator('#add_task_checkbox_freeze').check();
+        await page.locator('#add_task_checkbox_thumbnail').check();
+      }
+      await page.locator('#add_task_checkbox_audioAnalysis').check();
+      await page.locator('#add_task_checkbox_audioDecodability').check();
       await page.getByRole('button', { name: 'Start' }).click();
 
       await page.waitForTimeout(3000);
@@ -145,6 +186,140 @@ class BoroSession {
       if (error.message.includes('sign_in') || error.message.includes('Timeout')) {
         this.loggedIn = false;
       }
+      throw error;
+    } finally {
+      await page.close();
+    }
+  }
+
+  async listTasks() {
+    await this.ensureLoggedIn();
+    const page = await this.context.newPage();
+    try {
+      await page.goto(`${BORO_URL}/projects`);
+      if (page.url().includes('sign_in')) {
+        this.loggedIn = false;
+        await page.close();
+        await this.login();
+        return this.listTasks();
+      }
+      await page.getByRole('link', { name: 'All projects' }).click();
+      await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+      await page.locator('#toSidebar').click();
+      await page.waitForTimeout(1000);
+
+      const allTasks = [];
+      for (const [zone, probeId] of Object.entries(PROBE_IDS)) {
+        try {
+          const zoneLink = page.locator(`#sidebar_probe_${probeId}`).getByRole('link', { name: zone });
+          await zoneLink.scrollIntoViewIfNeeded();
+          await zoneLink.click({ timeout: 10000 });
+          await page.waitForTimeout(2000);
+
+          const tasks = await page.evaluate((zoneName) => {
+            const results = [];
+            const rows = document.querySelectorAll('table tbody tr, table tr.task_row, table tr');
+            for (const row of rows) {
+              const cells = row.querySelectorAll('td');
+              if (cells.length < 2) continue;
+              const nameEl = row.querySelector('a[href*="tasks"], .task_name, td:nth-child(2)');
+              const statusEl = row.querySelector('.task_status, td:nth-child(3)');
+              if (!nameEl) continue;
+              const name = nameEl.textContent?.trim();
+              if (!name || name === '') continue;
+              results.push({
+                name,
+                status: statusEl?.textContent?.trim() || 'N/A',
+                zone: zoneName,
+              });
+            }
+            return results;
+          }, zone);
+
+          allTasks.push(...tasks);
+        } catch (e) {
+          console.log(`[Boro] Error listing tasks for ${zone}: ${e.message}`);
+        }
+      }
+      console.log(`[Boro] Found ${allTasks.length} tasks across all zones`);
+      return allTasks;
+    } finally {
+      await page.close();
+    }
+  }
+
+  async deleteTask(taskName, probeId) {
+    await this.ensureLoggedIn();
+    const page = await this.context.newPage();
+    try {
+      await page.goto(`${BORO_URL}/projects`);
+      if (page.url().includes('sign_in')) {
+        this.loggedIn = false;
+        await page.close();
+        await this.login();
+        return this.deleteTask(taskName, probeId);
+      }
+      await page.getByRole('link', { name: 'All projects' }).click();
+      await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+      await page.locator('#toSidebar').click();
+      await page.waitForTimeout(1000);
+
+      const zoneEntry = Object.entries(PROBE_IDS).find(([, id]) => id === probeId);
+      const zoneName = zoneEntry ? zoneEntry[0] : probeId;
+      const zoneLink = page.locator(`#sidebar_probe_${probeId}`).getByRole('link', { name: zoneName });
+      await zoneLink.scrollIntoViewIfNeeded();
+      await zoneLink.click({ timeout: 10000 });
+      await page.waitForTimeout(2000);
+
+      // Hacer clic en el nombre de la tarea para abrir sus detalles
+      const taskLink = page.locator(`a:has-text("${taskName}")`).first();
+      await taskLink.waitFor({ state: 'visible', timeout: 10000 });
+      await taskLink.click();
+      await page.waitForTimeout(2000);
+
+      // Buscar botón de eliminar en los detalles de la tarea
+      const deleteBtn = page.locator('a[data-method="delete"], a[class*="del"], button[class*="del"], button[class*="delete"], a:has-text("Delete"), a:has-text("delete"), button:has-text("Delete")').first();
+      if (await deleteBtn.isVisible({ timeout: 5000 })) {
+        await deleteBtn.click();
+        await page.waitForTimeout(1000);
+
+        // Confirmar diálogo
+        try {
+          const confirmBtn = page.locator('button:has-text("OK"), button:has-text("Confirm"), button:has-text("Yes"), .ui-button:has-text("OK"), .ui-dialog-titlebar-close').first();
+          if (await confirmBtn.isVisible({ timeout: 3000 })) {
+            await confirmBtn.click();
+            await page.waitForTimeout(1000);
+          }
+        } catch {}
+      } else {
+        // Si no hay botón de eliminar, intentar con checkbox + bulk delete
+        const taskRow = page.locator(`tr:has(a:text("${taskName}"))`).first();
+        const checkbox = taskRow.locator('input[type="checkbox"]').first();
+        if (await checkbox.isVisible({ timeout: 2000 })) {
+          await checkbox.check();
+          await page.waitForTimeout(500);
+          const bulkDelete = page.locator('input[value="Delete"], button:has-text("Delete"), a:has-text("Delete")').first();
+          if (await bulkDelete.isVisible({ timeout: 2000 })) {
+            await bulkDelete.click();
+            await page.waitForTimeout(1000);
+          }
+        } else {
+          throw new Error('No delete button or checkbox found for this task');
+        }
+      }
+
+      // Confirmar diálogo si aparece
+      try {
+        const confirmBtn = page.locator('#confirm_dialog button:has-text("OK"), button:has-text("Yes"), button:has-text("Delete"), .ui-button:has-text("OK")').first();
+        if (await confirmBtn.isVisible({ timeout: 3000 })) {
+          await confirmBtn.click();
+          await page.waitForTimeout(1000);
+        }
+      } catch {}
+      console.log(`[Boro] Task "${taskName}" deleted from ${zoneName}`);
+      return { success: true, zone: zoneName };
+    } catch (error) {
+      console.error(`[Boro] Delete failed: ${error.message}`);
       throw error;
     } finally {
       await page.close();
@@ -180,19 +355,22 @@ async function processQueue() {
   console.log(`[Queue] Processing job ${job.id} (${jobQueue.length} in queue)`);
   try {
     const result = await boroSession.submitTask(job.data);
-    finishJob(job.id, result);
+    finishJob(job.id, result, job.data);
   } catch (e) {
-    finishJob(job.id, { success: false, error: e.message });
+    finishJob(job.id, { success: false, error: e.message }, job.data);
   } finally {
     queueRunning = false;
     processQueue();
   }
 }
 
-function finishJob(id, result) {
+function finishJob(id, result, taskData) {
   jobResults.set(id, result);
   jobEmitter.emit(id, result);
-  // limpiar resultado del cache después de 5 minutos
+  if (result.success && taskData) {
+    addSubmittedTask({ name: taskData.streamName, zone: taskData.zone });
+    console.log(`[Queue] Task "${taskData.streamName}" saved as submitted`);
+  }
   setTimeout(() => jobResults.delete(id), 5 * 60 * 1000);
 }
 
@@ -280,6 +458,29 @@ app.post('/api/issue-access-token', async (req, res) => {
     }
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Listar tareas subidas desde esta app
+app.get('/api/boro/tasks', async (req, res) => {
+  try {
+    const tasks = loadSubmittedTasks();
+    res.json({ success: true, tasks });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Eliminar una tarea de Boro y de la lista local
+app.post('/api/boro/delete-task', async (req, res) => {
+  const { taskName, probeId, zone } = req.body;
+  if (!taskName || !probeId) return res.status(400).json({ error: 'taskName y probeId requeridos' });
+  try {
+    const result = await boroSession.deleteTask(taskName, probeId);
+    removeSubmittedTask(taskName, zone || result.zone);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
