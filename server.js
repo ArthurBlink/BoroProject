@@ -396,6 +396,12 @@ function finishJob(id, result, taskData) {
 // Routes
 // ============================================================
 
+app.get('/api/config', (req, res) => {
+  res.json({
+    playlistBase: process.env.MS_PLAYLIST_BASE || 'https://mdstrm.com/live-stream-playlist',
+  });
+});
+
 app.get('/api/data', (req, res) => res.json(loadData()));
 
 app.post('/api/data', (req, res) => {
