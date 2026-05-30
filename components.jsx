@@ -61,8 +61,8 @@ function CardThumb({ live }) {
 
 /* ----------------------------- Live card ----------------------------- */
 
-function LiveCard({ live, onCopy, onUpload, submitting }) {
-  const url = `https://mdstrm.com/live-stream-playlist/${live.id}.m3u8`;
+function LiveCard({ live, onCopy, onUpload, submitting, playlistBase = 'https://mdstrm.com/live-stream-playlist' }) {
+  const url = `${playlistBase}/${live.id}.m3u8`;
   const shortId = live.id.slice(0, 8) + '…' + live.id.slice(-4);
 
   return (
@@ -324,7 +324,7 @@ const SIGNAL_TYPES = [
   { value: 'udp',       label: 'UDP / RTP',          placeholder: 'udp://host:port' },
 ];
 
-function BoroModal({ target, onClose, onSubmit, submitting }) {
+function BoroModal({ target, onClose, onSubmit, submitting, playlistBase = 'https://mdstrm.com/live-stream-playlist' }) {
   const { useState: _useState, useEffect: _useEffect } = React;
   const [zone, setZone] = _useState(BORO_ZONES[0]);
   const [signalType, setSignalType] = _useState('hls-video');
@@ -336,7 +336,7 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
 
   async function issueToken() {
     if (!target.apiKey || !target.id) {
-      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      setUrl(`${playlistBase}/${target.id}.m3u8`);
       if (!target.apiKey) setTokenError('Sin API Key — URL sin token de acceso.');
       return;
     }
@@ -353,11 +353,11 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
         setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8?access_token=${data.access_token}&admin_token=true`);
         setTokenError(null);
       } else {
-        setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+        setUrl(`${playlistBase}/${target.id}.m3u8`);
         setTokenError(`Error: ${data.error || 'no se pudo emitir token'}`);
       }
     } catch (e) {
-      setUrl(`https://mdstrm.com/live-stream-playlist/${target.id}.m3u8`);
+      setUrl(`${playlistBase}/${target.id}.m3u8`);
       setTokenError(`Error de red: ${e.message}`);
     } finally {
       setFetchingToken(false);
