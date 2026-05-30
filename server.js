@@ -33,6 +33,7 @@ const PROBE_IDS = {
 };
 
 const SUBMITTED_FILE = path.join(process.cwd(), 'submitted-tasks.json');
+const BORO_SESSION_FILE = path.join(process.cwd(), 'boro-session.json');
 
 function loadData() {
   try {
@@ -85,7 +86,18 @@ class BoroSession {
   async init() {
     if (!this.browser) {
       this.browser = await chromium.launch({ headless: true });
-      this.context = await this.browser.newContext();
+      let storageState;
+      if (fs.existsSync(BORO_SESSION_FILE)) {
+        try {
+          JSON.parse(fs.readFileSync(BORO_SESSION_FILE, 'utf8'));
+          storageState = BORO_SESSION_FILE;
+          this.loggedIn = true;
+          console.log('[Boro] Sesión restaurada desde disco');
+        } catch {
+          console.log('[Boro] boro-session.json corrupto, login normal');
+        }
+      }
+      this.context = await this.browser.newContext(storageState ? { storageState } : {});
       console.log('[Boro] Browser launched');
     }
   }
@@ -105,6 +117,12 @@ class BoroSession {
       await page.waitForTimeout(2000);
 
       this.loggedIn = true;
+      try {
+        await this.context.storageState({ path: BORO_SESSION_FILE });
+        fs.chmodSync(BORO_SESSION_FILE, 0o600);
+      } catch (e) {
+        console.log('[Boro] No se pudo guardar sesión:', e.message);
+      }
       console.log('[Boro] Session established');
     } finally {
       await page.close();
