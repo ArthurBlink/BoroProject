@@ -38,6 +38,9 @@ function App() {
   const [boroTasks, setBoroTasks] = useState([]);
   const [loadingBoro, setLoadingBoro] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [playlistBase, setPlaylistBase] = useState(
+    () => localStorage.getItem('playlistBase') || 'https://mdstrm.com/live-stream-playlist'
+  );
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) || null;
   const streams = streamsByAccount[activeAccountId] || [];
@@ -45,6 +48,21 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', t.theme || 'dark');
   }, [t.theme]);
+
+  useEffect(() => {
+    if (!localStorage.getItem('playlistBase')) {
+      fetch('/api/config').then(r => r.json()).then(cfg => {
+        if (cfg.playlistBase) setPlaylistBase(cfg.playlistBase);
+      }).catch(() => {});
+    }
+  }, []);
+
+  function updatePlaylistBase(val) {
+    const v = val.trim();
+    setPlaylistBase(v);
+    if (v) localStorage.setItem('playlistBase', v);
+    else localStorage.removeItem('playlistBase');
+  }
 
   useEffect(() => {
     if (activeAccount) fetchStreams(activeAccount);
@@ -389,6 +407,7 @@ function App() {
                     apiKey: activeAccount?.apiKey || null,
                   })}
                   submitting={submitting}
+                  playlistBase={playlistBase}
                 />
               ))
             )}
@@ -429,6 +448,7 @@ function App() {
           onClose={() => setBoroTarget(null)}
           onSubmit={handleBoroSubmit}
           submitting={submitting}
+          playlistBase={playlistBase}
         />
       )}
 
@@ -441,6 +461,13 @@ function App() {
           value={t.theme}
           options={[{ label: 'Oscuro', value: 'dark' }, { label: 'Claro', value: 'light' }]}
           onChange={(v) => setTweak('theme', v)}
+        />
+        <TweakSection label="Streams" />
+        <TweakText
+          label="Playlist base URL"
+          value={playlistBase}
+          placeholder="https://mdstrm.com/live-stream-playlist"
+          onChange={updatePlaylistBase}
         />
       </TweaksPanel>
     </div>

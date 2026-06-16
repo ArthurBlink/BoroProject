@@ -50,6 +50,7 @@ const PROBE_IDS = {
 };
 
 const SUBMITTED_FILE = path.join(process.cwd(), 'submitted-tasks.json');
+const BORO_SESSION_FILE = path.join(process.cwd(), 'boro-session.json');
 
 function loadData() {
   try {
@@ -110,7 +111,18 @@ class BoroSession {
   async init() {
     if (!this.browser) {
       this.browser = await chromium.launch({ headless: true });
-      this.context = await this.browser.newContext();
+      let storageState;
+      if (fs.existsSync(BORO_SESSION_FILE)) {
+        try {
+          JSON.parse(fs.readFileSync(BORO_SESSION_FILE, 'utf8'));
+          storageState = BORO_SESSION_FILE;
+          this.loggedIn = true;
+          logger.info('Session restored from disk', { component: 'Boro' });
+        } catch {
+          logger.warn('boro-session.json corrupt, fresh login', { component: 'Boro' });
+        }
+      }
+      this.context = await this.browser.newContext(storageState ? { storageState } : {});
       logger.info('Browser launched', { component: 'Boro' });
     }
   }
@@ -131,6 +143,12 @@ class BoroSession {
       await page.waitForTimeout(2000);
 
       this.loggedIn = true;
+      try {
+        await this.context.storageState({ path: BORO_SESSION_FILE });
+        fs.chmodSync(BORO_SESSION_FILE, 0o600);
+      } catch (e) {
+        logger.warn('Could not save session', { component: 'Boro', error: e.message });
+      }
       logger.info('Session established', { component: 'Boro', durationMs: Date.now() - loginStart, success: true });
     } finally {
       await page.close();
@@ -476,6 +494,12 @@ function finishJob(id, result, taskData) {
 // ============================================================
 // Routes
 // ============================================================
+
+app.get('/api/config', (req, res) => {
+  res.json({
+    playlistBase: process.env.MS_PLAYLIST_BASE || 'https://mdstrm.com/live-stream-playlist',
+  });
+});
 
 app.get('/api/data', (req, res) => res.json(loadData()));
 
