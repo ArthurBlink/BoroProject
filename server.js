@@ -55,7 +55,9 @@ const BORO_SESSION_FILE = path.join(process.cwd(), 'boro-session.json');
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch {}
+  } catch (e) {
+    logger.warn('Failed to read data.json, using defaults', { component: 'Data', error: e.message });
+  }
   return { token: '', streams: [] };
 }
 
@@ -66,7 +68,9 @@ function saveData(data) {
 function loadSubmittedTasks() {
   try {
     if (fs.existsSync(SUBMITTED_FILE)) return JSON.parse(fs.readFileSync(SUBMITTED_FILE, 'utf8'));
-  } catch {}
+  } catch (e) {
+    logger.warn('Failed to read submitted-tasks.json, using empty list', { component: 'Data', error: e.message });
+  }
   return [];
 }
 
@@ -333,7 +337,9 @@ class BoroSession {
             await confirmBtn.click();
             await page.waitForTimeout(1000);
           }
-        } catch {}
+        } catch (e) {
+          logger.warn('Confirm dialog (delete) not found or not clickable, continuing', { component: 'Boro', taskName, error: e.message });
+        }
       } else {
         // Si no hay botón de eliminar, intentar con checkbox + bulk delete
         const taskRow = page.locator(`tr:has(a:text("${taskName}"))`).first();
@@ -358,7 +364,9 @@ class BoroSession {
           await confirmBtn.click();
           await page.waitForTimeout(1000);
         }
-      } catch {}
+      } catch (e) {
+        logger.warn('Second confirm dialog not found or not clickable, continuing', { component: 'Boro', taskName, error: e.message });
+      }
       logger.info('Task deleted', { component: 'Boro', taskName, zone: zoneName });
       return { success: true, zone: zoneName };
     } catch (error) {

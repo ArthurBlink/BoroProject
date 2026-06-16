@@ -11,12 +11,16 @@ function loadAccounts() {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch (e) {
+    console.warn('loadAccounts: failed to parse stored accounts', e);
+  }
   return [];
 }
 
 function saveAccounts(accounts) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(accounts)); } catch {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(accounts)); } catch (e) {
+    console.warn('saveAccounts: failed to persist accounts', e);
+  }
 }
 
 function App() {
@@ -176,7 +180,9 @@ function App() {
   }
 
   function copyTo(text, msg) {
-    try { navigator.clipboard?.writeText(text); } catch {}
+    try { navigator.clipboard?.writeText(text); } catch (e) {
+      console.warn('copyTo: clipboard write failed', e);
+    }
     pushToast(msg);
   }
 
