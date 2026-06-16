@@ -630,6 +630,24 @@ input, select, textarea {
 }
 .act.act-danger:hover:not(:disabled) { background: color-mix(in oklab, var(--danger) 12%, transparent); border-color: var(--danger); }
 
+.act.act-stop {
+  height: 34px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+  background: transparent;
+  color: var(--warn);
+  transition: all var(--t-fast) var(--ease);
+  white-space: nowrap;
+  padding: 0 12px;
+}
+.act.act-stop:hover:not(:disabled) { background: color-mix(in oklab, var(--warn) 12%, transparent); border-color: var(--warn); }
+
 .confirm-delete {
   display: flex;
   align-items: center;
@@ -639,6 +657,31 @@ input, select, textarea {
 }
 .confirm-delete .btn-danger { height: 30px; padding: 0 10px; font-size: 12px; }
 .confirm-delete .btn-ghost { height: 30px; padding: 0 10px; font-size: 12px; }
+
+.confirm-stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+.confirm-stop .btn-stop {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+  background: transparent;
+  color: var(--warn);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+.confirm-stop .btn-stop:hover { background: color-mix(in oklab, var(--warn) 12%, transparent); border-color: var(--warn); }
+.confirm-stop .btn-ghost { height: 30px; padding: 0 10px; font-size: 12px; }
 
 /* ============================================================
    Card grid

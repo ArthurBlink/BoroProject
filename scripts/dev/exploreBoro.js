@@ -1,3 +1,6 @@
+// scripts/dev/exploreBoro.js
+// Development-only: used to reverse-engineer Boro selectors.
+// Not part of production — kept here for reference when Boro UI changes.
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
 

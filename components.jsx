@@ -326,6 +326,7 @@ const SIGNAL_TYPES = [
 
 function BoroModal({ target, onClose, onSubmit, submitting }) {
   const { useState: _useState, useEffect: _useEffect } = React;
+  const [taskName, setTaskName] = _useState(target.name);
   const [zone, setZone] = _useState(BORO_ZONES[0]);
   const [signalType, setSignalType] = _useState('hls-video');
   const [url, setUrl] = _useState('');
@@ -396,6 +397,16 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
         </div>
         <div className="modal-body">
           <div className="field">
+            <label htmlFor="boro-task-name">Nombre en Boro</label>
+            <input
+              id="boro-task-name"
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
+              placeholder="Ej. Mi señal personalizada"
+              disabled={submitting || fetchingToken}
+            />
+          </div>
+          <div className="field">
             <label htmlFor="boro-signal-type">Tipo de señal</label>
             <select
               id="boro-signal-type"
@@ -455,7 +466,7 @@ function BoroModal({ target, onClose, onSubmit, submitting }) {
           <button className="btn-ghost" onClick={onClose} disabled={submitting}>Cancelar</button>
           <button
             className="btn-primary"
-            onClick={() => onSubmit({ zone, signalType, url: url.trim() })}
+            onClick={() => onSubmit({ name: taskName.trim() || target.name, zone, signalType, url: url.trim() })}
             disabled={submitting || !canSubmit}
           >
             {submitting ? <Icon.Loader /> : <Icon.Upload />}
@@ -479,8 +490,8 @@ const BORO_PROBE_IDS = {
   'US-Link-SRT': '6308',
 };
 
-function BoroTaskList({ tasks, loading, onRefresh, onDelete }) {
-  const [confirmDelete, setConfirmDelete] = useState(null);
+function BoroTaskList({ tasks, loading, onRefresh, onDelete, onStop }) {
+  const [confirmStop, setConfirmStop] = useState(null);
 
   return (
     <div className="boro-tasks">
@@ -519,23 +530,21 @@ function BoroTaskList({ tasks, loading, onRefresh, onDelete }) {
                 </div>
               </div>
               <div className="boro-task-actions">
-                {confirmDelete === i ? (
-                  <div className="confirm-delete">
-                    <span>¿Eliminar?</span>
-                    <button className="btn-danger" onClick={() => {
+                {confirmStop === i ? (
+                  <div className="confirm-stop">
+                    <span>¿Detener y eliminar de la lista?</span>
+                    <button className="btn-stop" onClick={() => {
                       const probeId = BORO_PROBE_IDS[t.zone];
-                      if (probeId) {
-                        onDelete(t.name, probeId, t.zone);
-                      }
-                      setConfirmDelete(null);
+                      if (probeId) onStop(t.name, probeId, t.zone);
+                      setConfirmStop(null);
                     }}>
-                      <Icon.Trash /> Confirmar
+                      ⏹ Sí, detener
                     </button>
-                    <button className="btn-ghost" onClick={() => setConfirmDelete(null)}>No</button>
+                    <button className="btn-ghost" onClick={() => setConfirmStop(null)}>No</button>
                   </div>
                 ) : (
-                  <button className="act act-danger" onClick={() => setConfirmDelete(i)} title="Eliminar tarea">
-                    <Icon.Trash /> Eliminar
+                  <button className="act act-stop" onClick={() => setConfirmStop(i)} title="Detener tarea">
+                    ⏹ Stop
                   </button>
                 )}
               </div>

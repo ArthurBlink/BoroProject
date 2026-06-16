@@ -5,8 +5,25 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { chromium } from '@playwright/test';
+import winston from 'winston';
 
 dotenv.config();
+
+const LOG_DIR = path.join(process.cwd(), 'logs');
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console({ format: winston.format.simple() }),
+    new winston.transports.File({ filename: path.join(LOG_DIR, 'error.log'), level: 'error' }),
+    new winston.transports.File({ filename: path.join(LOG_DIR, 'combined.log'), maxsize: 5242880, maxFiles: 5 }),
+  ],
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,8 +84,16 @@ function addSubmittedTask(task) {
 
 function removeSubmittedTask(taskName, zone) {
   const tasks = loadSubmittedTasks();
-  const filtered = tasks.filter((t) => !(t.name === taskName && t.zone === zone));
-  saveSubmittedTasks(filtered);
+  logger.info('Removing submitted task', { component: 'Submitted', taskName, zone, count: tasks.length });
+  const before = tasks.length;
+  const filtered = tasks.filter((t) => t.name !== taskName);
+  logger.info('Filtered submitted tasks', { component: 'Submitted', before, after: filtered.length });
+  if (filtered.length < before) {
+    saveSubmittedTasks(filtered);
+    logger.info('Submitted task removed', { component: 'Submitted', taskName });
+  } else {
+    logger.warn('No matching submitted task found', { component: 'Submitted', taskName });
+  }
 }
 
 // ============================================================
@@ -86,7 +111,7 @@ class BoroSession {
     if (!this.browser) {
       this.browser = await chromium.launch({ headless: true });
       this.context = await this.browser.newContext();
-      console.log('[Boro] Browser launched');
+      logger.info('Browser launched', { component: 'Boro' });
     }
   }
 
@@ -94,7 +119,8 @@ class BoroSession {
     await this.init();
     const page = await this.context.newPage();
     try {
-      console.log('[Boro] Logging in...');
+      logger.info('Logging in to Boro', { component: 'Boro' });
+      const loginStart = Date.now();
       await page.goto(`${BORO_URL}/users/sign_in`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(2000);
 
@@ -105,7 +131,7 @@ class BoroSession {
       await page.waitForTimeout(2000);
 
       this.loggedIn = true;
-      console.log('[Boro] Session established');
+      logger.info('Session established', { component: 'Boro', durationMs: Date.now() - loginStart, success: true });
     } finally {
       await page.close();
     }
@@ -126,14 +152,13 @@ class BoroSession {
       : ['soporte', 'soporte_boro'];
 
     try {
-      console.log(`[Boro] Submitting "${streamName}" [${signalType}] → ${zone} (probe: ${probeId})`);
-      console.log(`[Boro] Profiles: ${profiles.join(', ')}`);
+      logger.info('Submitting task', { component: 'Boro', streamName, signalType, zone, probeId, profiles });
 
       await page.goto(`${BORO_URL}/projects`);
 
       // Sesión expirada — redirect a login
       if (page.url().includes('sign_in')) {
-        console.log('[Boro] Session expired, re-authenticating...');
+        logger.info('Session expired, re-authenticating', { component: 'Boro' });
         this.loggedIn = false;
         await page.close();
         await this.login();
@@ -178,11 +203,11 @@ class BoroSession {
       await page.getByRole('button', { name: 'Start' }).click();
 
       await page.waitForTimeout(3000);
-      console.log(`[Boro] Task "${streamName}" created successfully`);
+      logger.info('Task created successfully', { component: 'Boro', streamName, signalType, zone });
       return { success: true };
 
     } catch (error) {
-      console.error('[Boro] Error:', error.message);
+      logger.error('Boro automation failed', { component: 'Boro', streamName, zone, error: error.message, stack: error.stack });
       if (error.message.includes('sign_in') || error.message.includes('Timeout')) {
         this.loggedIn = false;
       }
@@ -238,10 +263,10 @@ class BoroSession {
 
           allTasks.push(...tasks);
         } catch (e) {
-          console.log(`[Boro] Error listing tasks for ${zone}: ${e.message}`);
+          logger.warn('Error listing tasks for zone', { component: 'Boro', zone, error: e.message });
         }
       }
-      console.log(`[Boro] Found ${allTasks.length} tasks across all zones`);
+      logger.info('Listed all tasks', { component: 'Boro', count: allTasks.length });
       return allTasks;
     } finally {
       await page.close();
@@ -316,10 +341,84 @@ class BoroSession {
           await page.waitForTimeout(1000);
         }
       } catch {}
-      console.log(`[Boro] Task "${taskName}" deleted from ${zoneName}`);
+      logger.info('Task deleted', { component: 'Boro', taskName, zone: zoneName });
       return { success: true, zone: zoneName };
     } catch (error) {
-      console.error(`[Boro] Delete failed: ${error.message}`);
+      logger.error('Delete failed', { component: 'Boro', taskName, error: error.message, stack: error.stack });
+      throw error;
+    } finally {
+      await page.close();
+    }
+  }
+
+  async stopTask(taskName, probeId) {
+    await this.ensureLoggedIn();
+    const page = await this.context.newPage();
+    try {
+      await page.goto(`${BORO_URL}/projects`);
+      if (page.url().includes('sign_in')) {
+        this.loggedIn = false;
+        await page.close();
+        await this.login();
+        return this.stopTask(taskName, probeId);
+      }
+      await page.getByRole('link', { name: 'All projects' }).click();
+      await page.getByRole('link', { name: 'Bluefile iconMediastream' }).click();
+      await page.locator('#toSidebar').click();
+      await page.waitForTimeout(1000);
+
+      const zoneName = Object.entries(PROBE_IDS).find(([, id]) => id === probeId)?.[0] || probeId;
+      const zoneLink = page.locator(`#sidebar_probe_${probeId}`).getByRole('link', { name: zoneName });
+      await zoneLink.scrollIntoViewIfNeeded();
+      await zoneLink.click({ timeout: 10000 });
+      await page.waitForTimeout(2000);
+
+      const result = await page.evaluate((name) => {
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfMeta?.getAttribute('content');
+        const urlMatch = window.location.href.match(/\/projects\/(\d+)\/apps\/(\d+)/);
+        const projectId = urlMatch ? urlMatch[1] : null;
+        const appProbeId = urlMatch ? urlMatch[2] : null;
+        let taskId = null;
+        const rows = document.querySelectorAll('table tbody tr, table tr');
+        for (const row of rows) {
+          if (row.textContent.includes(name)) {
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox?.value) taskId = checkbox.value;
+            if (!taskId) {
+              const link = row.querySelector('a[href*="tasks"]');
+              const m = link?.href?.match(/tasks\/(\d+)/);
+              if (m) taskId = m[1];
+            }
+            break;
+          }
+        }
+        return { csrfToken, projectId, probeId: appProbeId, taskId };
+      }, taskName);
+
+      if (result.taskId && result.csrfToken && result.projectId) {
+        await page.evaluate(async ({ projectId, probeId, taskId, csrfToken }) => {
+          const params = new URLSearchParams();
+          params.append('selectedTask[]', taskId);
+          await fetch(`/projects/${projectId}/apps/${probeId}/stop_tasks`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'X-CSRF-Token': csrfToken,
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: params.toString(),
+            credentials: 'include',
+          });
+        }, result);
+        await page.waitForTimeout(2000);
+        logger.info('Task stopped successfully', { component: 'Boro', taskName });
+      } else {
+        logger.warn('Task not found on page, removing from list', { component: 'Boro', taskName });
+      }
+      return { success: true };
+    } catch (error) {
+      logger.error('Stop failed', { component: 'Boro', taskName, error: error.message, stack: error.stack });
       throw error;
     } finally {
       await page.close();
@@ -332,7 +431,7 @@ class BoroSession {
       this.browser = null;
       this.context = null;
       this.loggedIn = false;
-      console.log('[Boro] Browser closed');
+      logger.info('Browser closed', { component: 'Boro' });
     }
   }
 }
@@ -352,7 +451,7 @@ async function processQueue() {
   if (queueRunning || jobQueue.length === 0) return;
   queueRunning = true;
   const job = jobQueue.shift();
-  console.log(`[Queue] Processing job ${job.id} (${jobQueue.length} in queue)`);
+  logger.info('Processing job', { component: 'Queue', jobId: job.id, queueLength: jobQueue.length, ...job.data });
   try {
     const result = await boroSession.submitTask(job.data);
     finishJob(job.id, result, job.data);
@@ -369,7 +468,7 @@ function finishJob(id, result, taskData) {
   jobEmitter.emit(id, result);
   if (result.success && taskData) {
     addSubmittedTask({ name: taskData.streamName, zone: taskData.zone });
-    console.log(`[Queue] Task "${taskData.streamName}" saved as submitted`);
+    logger.info('Task saved as submitted', { component: 'Queue', jobId: id, streamName: taskData.streamName, zone: taskData.zone });
   }
   setTimeout(() => jobResults.delete(id), 5 * 60 * 1000);
 }
@@ -413,7 +512,7 @@ app.post('/api/submit-to-boro', (req, res) => {
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const position = jobQueue.length;
   jobQueue.push({ id: jobId, data: { streamName, streamUrl, zone, signalType } });
-  console.log(`[Queue] Job ${jobId} enqueued at position ${position}`);
+  logger.info('Job enqueued', { component: 'Queue', jobId, streamName, zone, position });
 
   res.json({ jobId, position });
   processQueue();
@@ -484,10 +583,24 @@ app.post('/api/boro/delete-task', async (req, res) => {
   }
 });
 
+// Detener una tarea en Boro
+app.post('/api/boro/stop-task', async (req, res) => {
+  const { taskName, probeId, zone } = req.body;
+  if (!taskName || !probeId) return res.status(400).json({ error: 'taskName y probeId requeridos' });
+  try {
+    await boroSession.stopTask(taskName, probeId);
+    removeSubmittedTask(taskName, zone);
+    res.json({ success: true, removedFromList: true });
+  } catch (error) {
+    logger.error('Stop-task route error', { component: 'Stop', taskName, error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Graceful shutdown — cierra el browser de Playwright
 process.on('SIGTERM', async () => { await boroSession.close(); process.exit(0); });
 process.on('SIGINT',  async () => { await boroSession.close(); process.exit(0); });
 
 app.listen(PORT, () => {
-  console.log(`Server running: http://localhost:${PORT}`);
+  logger.info('Server started', { component: 'Server', port: PORT, url: `http://localhost:${PORT}` });
 });

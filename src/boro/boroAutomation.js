@@ -90,25 +90,3 @@ export async function createTask(page, taskName, streamUrl, options = {}) {
     }
   });
 }
-
-export async function listTasks(page) {
-  try {
-    await page.waitForLoadState('networkidle');
-    console.log('Tasks listed');
-    return true;
-  } catch (error) {
-    console.error('Error listing tasks:', error.message);
-    return [];
-  }
-}
-
-export async function getTaskStatus(page, taskName) {
-  try {
-    await page.waitForLoadState('networkidle');
-    console.log(`Task "${taskName}" status check`);
-    return 'Active';
-  } catch (error) {
-    console.error('Error getting task status:', error.message);
-    return 'Error';
-  }
-}

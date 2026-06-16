@@ -97,6 +97,25 @@ function App() {
     }
   }
 
+  async function handleStopBoroTask(taskName, probeId, zone) {
+    try {
+      const res = await fetch('/api/boro/stop-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskName, probeId, zone }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBoroTasks((prev) => prev.filter((t) => t.name !== taskName));
+        pushToast(`✓ "${taskName}" detenida y eliminada de la lista`);
+      } else {
+        pushToast(`Error: ${data.error}`, 'error');
+      }
+    } catch (e) {
+      pushToast(`Error de red: ${e.message}`, 'error');
+    }
+  }
+
   async function handleDeleteBoroTask(taskName, probeId, zone) {
     try {
       const res = await fetch('/api/boro/delete-task', {
@@ -143,9 +162,10 @@ function App() {
     pushToast(msg);
   }
 
-  async function handleBoroSubmit({ zone, signalType, url }) {
+  async function handleBoroSubmit({ name, zone, signalType, url }) {
     if (!boroTarget) return;
     const target = boroTarget;
+    const taskName = name || target.name;
     setBoroTarget(null);
     setSubmitting(true);
 
@@ -153,12 +173,12 @@ function App() {
       const res = await fetch('/api/submit-to-boro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ streamName: target.name, streamUrl: url, zone, signalType }),
+        body: JSON.stringify({ streamName: taskName, streamUrl: url, zone, signalType }),
       });
       const { jobId, position } = await res.json();
 
       const posLabel = position > 0 ? ` · posición ${position + 1} en cola` : '';
-      pushToast(`En cola: "${target.name}" [${signalType}] → ${zone}${posLabel}`, 'info');
+      pushToast(`En cola: "${taskName}" [${signalType}] → ${zone}${posLabel}`, 'info');
 
       let done = false;
       while (!done) {
@@ -167,7 +187,7 @@ function App() {
         if (data.status === 'done') {
           done = true;
           if (data.success) {
-            pushToast(`✓ "${target.name}" subido a ${zone} exitosamente`);
+            pushToast(`✓ "${taskName}" subido a ${zone} exitosamente`);
           } else {
             pushToast(`Error en Boro: ${data.error}`, 'error');
           }
@@ -381,6 +401,7 @@ function App() {
             loading={loadingBoro}
             onRefresh={fetchBoroTasks}
             onDelete={handleDeleteBoroTask}
+            onStop={handleStopBoroTask}
           />
         )}
       </main>
