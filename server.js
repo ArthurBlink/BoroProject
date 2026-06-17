@@ -67,7 +67,21 @@ function saveData(data) {
 
 function loadSubmittedTasks() {
   try {
-    if (fs.existsSync(SUBMITTED_FILE)) return JSON.parse(fs.readFileSync(SUBMITTED_FILE, 'utf8'));
+    if (fs.existsSync(SUBMITTED_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(SUBMITTED_FILE, 'utf8'));
+      // Migrate old entries — fill missing fields with null
+      return raw.map((t) => ({
+        name: t.name,
+        zone: t.zone,
+        probeId: t.probeId || null,
+        streamUrl: t.streamUrl || null,
+        streamId: t.streamId || null,
+        signalType: t.signalType || null,
+        account: t.account || null,
+        boroTaskId: t.boroTaskId || null,
+        createdAt: t.createdAt || new Date().toISOString(),
+      }));
+    }
   } catch (e) {
     logger.warn('Failed to read submitted-tasks.json, using empty list', { component: 'Data', error: e.message });
   }
@@ -82,7 +96,17 @@ function addSubmittedTask(task) {
   const tasks = loadSubmittedTasks();
   const exists = tasks.some((t) => t.name === task.name && t.zone === task.zone);
   if (!exists) {
-    tasks.push({ name: task.name, zone: task.zone, createdAt: new Date().toISOString() });
+    tasks.push({
+      name: task.name,
+      zone: task.zone,
+      probeId: task.probeId || null,
+      streamUrl: task.streamUrl || null,
+      streamId: task.streamId || null,
+      signalType: task.signalType || null,
+      account: task.account || null,
+      boroTaskId: task.boroTaskId || null,
+      createdAt: new Date().toISOString(),
+    });
     saveSubmittedTasks(tasks);
   }
 }
@@ -260,30 +284,37 @@ class BoroSession {
         try {
           const zoneLink = page.locator(`#sidebar_probe_${probeId}`).getByRole('link', { name: zone });
           await zoneLink.scrollIntoViewIfNeeded();
+
+          // Intercept the web_api/v1 response containing app_get_live_tasks
+          const tasksPromise = new Promise((resolve) => {
+            const handler = async (res) => {
+              if (res.url().includes('/web_api/v1') && res.status() === 200) {
+                try {
+                  const body = JSON.parse(await res.text());
+                  const entry = body.find((e) => e.name === 'app_get_live_tasks');
+                  if (entry && entry.data?.add_tasks?.data?.tasks) {
+                    page.off('response', handler);
+                    resolve(entry.data.add_tasks.data.tasks);
+                  }
+                } catch {}
+              }
+            };
+            page.on('response', handler);
+            // Timeout safety
+            setTimeout(() => { page.off('response', handler); resolve([]); }, 15000);
+          });
+
           await zoneLink.click({ timeout: 10000 });
-          await page.waitForTimeout(2000);
+          const tasks = await tasksPromise;
 
-          const tasks = await page.evaluate((zoneName) => {
-            const results = [];
-            const rows = document.querySelectorAll('table tbody tr, table tr.task_row, table tr');
-            for (const row of rows) {
-              const cells = row.querySelectorAll('td');
-              if (cells.length < 2) continue;
-              const nameEl = row.querySelector('a[href*="tasks"], .task_name, td:nth-child(2)');
-              const statusEl = row.querySelector('.task_status, td:nth-child(3)');
-              if (!nameEl) continue;
-              const name = nameEl.textContent?.trim();
-              if (!name || name === '') continue;
-              results.push({
-                name,
-                status: statusEl?.textContent?.trim() || 'N/A',
-                zone: zoneName,
-              });
-            }
-            return results;
-          }, zone);
-
-          allTasks.push(...tasks);
+          for (const t of tasks) {
+            allTasks.push({
+              id: t.id,
+              name: t.name,
+              status: t.status || 'N/A',
+              zone,
+            });
+          }
         } catch (e) {
           logger.warn('Error listing tasks for zone', { component: 'Boro', zone, error: e.message });
         }
@@ -493,7 +524,15 @@ function finishJob(id, result, taskData) {
   jobResults.set(id, result);
   jobEmitter.emit(id, result);
   if (result.success && taskData) {
-    addSubmittedTask({ name: taskData.streamName, zone: taskData.zone });
+    addSubmittedTask({
+      name: taskData.streamName,
+      zone: taskData.zone,
+      probeId: taskData.probeId,
+      streamUrl: taskData.streamUrl,
+      streamId: taskData.streamId,
+      signalType: taskData.signalType,
+      account: taskData.account,
+    });
     logger.info('Task saved as submitted', { component: 'Queue', jobId: id, streamName: taskData.streamName, zone: taskData.zone });
   }
   setTimeout(() => jobResults.delete(id), 5 * 60 * 1000);
@@ -538,12 +577,12 @@ app.post('/api/live-stream', async (req, res) => {
 
 // Encola el job, responde inmediatamente con jobId
 app.post('/api/submit-to-boro', (req, res) => {
-  const { streamName, streamUrl, zone, signalType } = req.body;
+  const { streamName, streamUrl, zone, signalType, streamId, account, probeId } = req.body;
   if (!streamName || !streamUrl) return res.status(400).json({ error: 'Faltan parámetros' });
 
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const position = jobQueue.length;
-  jobQueue.push({ id: jobId, data: { streamName, streamUrl, zone, signalType } });
+  jobQueue.push({ id: jobId, data: { streamName, streamUrl, zone, signalType, streamId, account, probeId } });
   logger.info('Job enqueued', { component: 'Queue', jobId, streamName, zone, position });
 
   res.json({ jobId, position });

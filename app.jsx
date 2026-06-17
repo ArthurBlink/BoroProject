@@ -190,6 +190,7 @@ function App() {
     if (!boroTarget) return;
     const target = boroTarget;
     const taskName = name || target.name;
+    const probeId = { 'CO - Boro':'8552','BR-SaoPaulo-Sensay':'4933','CL-VMSensay':'4957','EU-EC2 Boro (Spain)':'7892','PE-EC2-Lima':'9593','US-EC2-Boro':'8566','US-Link-SRT':'6308' }[zone];
     setBoroTarget(null);
     setSubmitting(true);
 
@@ -197,7 +198,15 @@ function App() {
       const res = await fetch('/api/submit-to-boro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ streamName: taskName, streamUrl: url, zone, signalType }),
+        body: JSON.stringify({
+          streamName: taskName,
+          streamUrl: url,
+          zone,
+          signalType,
+          streamId: target.id,
+          account: activeAccount?.name || null,
+          probeId,
+        }),
       });
       const { jobId, position } = await res.json();
 

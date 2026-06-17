@@ -528,6 +528,14 @@ function BoroTaskList({ tasks, loading, onRefresh, onDelete, onStop }) {
                     {t.status}
                   </span>
                 </div>
+                <div className="boro-task-details" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  {t.signalType && <span style={{ marginRight: 12 }}>{t.signalType}</span>}
+                  {t.streamUrl && (
+                    <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', display: 'block', marginTop: 2 }}>
+                      {t.streamUrl}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="boro-task-actions">
                 {confirmStop === i ? (
